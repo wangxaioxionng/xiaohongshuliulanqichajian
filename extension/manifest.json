@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "name": "小红书一键收录",
+  "short_name": "xhs-collect",
+  "version": "4.7.0",
+  "description": "一键收录小红书笔记到飞书表。支持爆款图多图保存、账号库和账号前400篇全采集。",
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "收录这条小红书笔记",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "permissions": [
+    "activeTab",
+    "storage",
+    "contextMenus",
+    "tabs",
+    "notifications",
+    "scripting"
+  ],
+
+  "host_permissions": [
+    "http://14.22.112.147:8866/*",
+    "https://www.xiaohongshu.com/*",
+    "https://xhslink.com/*"
+  ],
+
+  "commands": {
+    "collect-current": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+X",
+        "mac": "Command+Shift+X"
+      },
+      "description": "一键收录当前小红书笔记到飞书"
+    }
+  },
+
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  }
+}

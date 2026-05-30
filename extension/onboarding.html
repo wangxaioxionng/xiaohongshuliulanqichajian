@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>小红书一键收录 · 登录</title>
+  <style>
+    :root {
+      --brand: #FF2442;
+      --brand-hover: #E61E3C;
+      --gray-50: #FAFAFA;
+      --gray-100: #F4F4F5;
+      --gray-200: #E4E4E7;
+      --gray-500: #71717A;
+      --gray-700: #3F3F46;
+      --gray-900: #18181B;
+      --green: #16A34A;
+      --red: #DC2626;
+      --orange: #EA580C;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--gray-900);
+      background: linear-gradient(135deg, #FFF5F5 0%, #FFFFFF 50%);
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 480px;
+      margin: 40px auto;
+      padding: 40px 30px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+    }
+    h1 {
+      font-size: 22px;
+      color: var(--brand);
+      margin-bottom: 8px;
+    }
+    .sub {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-bottom: 30px;
+    }
+
+    /* 步骤指示器 */
+    .steps {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    .step {
+      flex: 1;
+      padding: 8px;
+      text-align: center;
+      font-size: 12px;
+      background: var(--gray-100);
+      color: var(--gray-500);
+      border-radius: 6px;
+      position: relative;
+    }
+    .step.active {
+      background: var(--brand);
+      color: white;
+      font-weight: 500;
+    }
+    .step.done {
+      background: #F0FDF4;
+      color: var(--green);
+    }
+
+    /* 屏：每屏是一个 .screen，互斥显示 */
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    .step-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .step-desc {
+      color: var(--gray-700);
+      font-size: 13px;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .field { margin-bottom: 18px; }
+    .field label {
+      display: block;
+      font-size: 12px;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .field input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--gray-200);
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+    }
+    .field input[type="text"]:focus { border-color: var(--brand); }
+    .field .hint {
+      font-size: 11px;
+      color: var(--gray-500);
+      margin-top: 4px;
+    }
+
+    button.btn {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--brand);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button.btn:hover { background: var(--brand-hover); }
+    button.btn:disabled { background: var(--gray-200); cursor: not-allowed; color: var(--gray-500); }
+    button.btn-outline {
+      background: white;
+      color: var(--brand);
+      border: 1px solid var(--brand);
+    }
+    button.btn-outline:hover { background: #FFF5F5; }
+
+    .status-msg {
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-top: 12px;
+      display: none;
+    }
+    .status-msg.show { display: block; }
+    .status-msg.success { background: #F0FDF4; color: var(--green); border: 1px solid #BBF7D0; }
+    .status-msg.error { background: #FEF2F2; color: var(--red); border: 1px solid #FECACA; }
+    .status-msg.info { background: #FEF7E6; color: var(--orange); border: 1px solid #FED7AA; }
+
+    .tip {
+      background: #FEF7E6;
+      border: 1px solid #FED7AA;
+      padding: 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--gray-700);
+      margin-top: 16px;
+    }
+    .tip strong { color: var(--orange); }
+    .tip code {
+      background: white;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+    }
+    .tip ol { padding-left: 20px; margin: 6px 0; }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: var(--gray-50);
+      border-radius: 6px;
+      margin-bottom: 20px;
+    }
+    .user-info img {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+    }
+    .user-info .name {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .user-info .status {
+      font-size: 12px;
+      color: var(--gray-500);
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>📌 小红书一键收录</h1>
+  <div class="sub">欢迎使用！3 步配置完成，开始一键收录小红书笔记到飞书</div>
+
+  <div class="steps">
+    <div class="step" id="step-indicator-1">1. 飞书登录</div>
+    <div class="step" id="step-indicator-2">2. 输入激活码</div>
+    <div class="step" id="step-indicator-3">3. 绑定飞书表</div>
+  </div>
+
+  <!-- 屏 1：飞书登录 -->
+  <div class="screen" id="screen-login">
+    <div class="step-title">🔐 第 1 步：飞书扫码登录</div>
+    <div class="step-desc">点下面按钮，会跳转到飞书授权页。扫码 + 授权后，飞书会跳回这里。</div>
+    <button class="btn" id="btn-login">📱 飞书扫码登录</button>
+    <div class="tip">
+      <strong>谁能登录</strong>：必须是「小红书收录助手」机器人可见范围内的同事。如果扫码后被拒，联系王小熊把你加到可见范围。
+    </div>
+  </div>
+
+  <!-- 屏 1.5：等待自动收 Token（fallback 才显示手动粘贴）-->
+  <div class="screen" id="screen-paste-jwt">
+    <div class="step-title">⏳ 等待飞书完成授权…</div>
+    <div class="step-desc">
+      扫码授权后，扩展会<b>自动收到 Token</b>并跳到下一步，<b>无需手动操作</b>。<br>
+      请在弹出的飞书页面用手机扫码并选择「<b>武汉眸佑商贸有限公司</b>」企业身份。<br>
+      （如果没看到这个企业，联系王小熊把你加进企业里）
+    </div>
+    <div class="tip" id="manual-fallback-hint" style="display:none">
+      ⚠️ <b>已经过 15 秒仍没自动跳转</b> — 扩展监听可能失败了。请手动粘贴：
+      <div class="field" style="margin-top:10px">
+        <label>Login Token（从飞书登录成功页复制）</label>
+        <input type="text" id="input-jwt" placeholder="Cmd+V 粘贴飞书返回的长串字符">
+      </div>
+      <button class="btn" id="btn-submit-jwt" style="margin-top:8px">手动提交 Token</button>
+      <div class="status-msg" id="msg-jwt"></div>
+    </div>
+  </div>
+
+  <!-- 屏 2：激活码 -->
+  <div class="screen" id="screen-activation">
+    <div class="user-info" id="user-info-activation"></div>
+    <div class="step-title">🔑 第 2 步：输入激活码</div>
+    <div class="step-desc">王小熊会私聊发你一个激活码，粘贴下面：</div>
+    <div class="field">
+      <label>激活码</label>
+      <input type="text" id="input-code" placeholder="从王小熊那拿到的激活码">
+      <div class="hint">激活码只能用一次，激活后这个码就作废</div>
+    </div>
+    <button class="btn" id="btn-activate">激活账号</button>
+    <div class="status-msg" id="msg-activate"></div>
+  </div>
+
+  <!-- 屏 3：绑表 -->
+  <div class="screen" id="screen-bind-sheet">
+    <div class="user-info" id="user-info-bind"></div>
+    <div class="step-title">📊 第 3 步：连接飞书表（含权限授权）</div>
+    <div class="step-desc">把你自己的飞书表 URL 贴下面，系统会自动给你建好 8 个分类 sheet。</div>
+
+    <div class="tip" style="background:#FEF3C7;border-left-color:#F59E0B">
+      <strong>📝 还没有飞书表？先新建一个：</strong>
+      <ol>
+        <li>打开 <a href="https://acnl9ctl8qlc.feishu.cn/drive/explorer" target="_blank"><b>飞书云空间</b></a></li>
+        <li>左上角「新建」→「电子表格」→ 起个名字（如「小红书爆款收集」）</li>
+        <li>新建好后复制顶部 URL，粘贴到下面的输入框</li>
+      </ol>
+      <p style="margin:6px 0 0 0;font-size:11px">💡 已经有飞书表？跳过这步，直接做下面的 3 件事。</p>
+    </div>
+
+    <div class="tip">
+      <strong>⚠️ 先在飞书表格做这 3 件事（缺一不可）：</strong>
+      <ol>
+        <li>打开你的飞书表 → 右上角 <b>⋯</b>（更多）→ 点击「<b>更多</b>」</li>
+        <li>找到「<b>添加文档应用</b>」→ 搜索「<b>小红书收录助手</b>」</li>
+        <li>点击「<b>添加</b>」→ 应用出现在「已添加应用」列表里 ✅</li>
+      </ol>
+      <p style="margin:8px 0 0 0">📸 <a href="help.html#add-doc-app" target="_blank"><b>看图教程</b></a></p>
+      <p style="margin:8px 0 0 0">💡 <b>注意</b>：仅"协作者"权限不够！必须按上面 3 步把 bot 加为"<b>文档应用</b>"才有写权限。</p>
+    </div>
+
+    <div class="field" style="margin-top:20px">
+      <label>飞书表 URL</label>
+      <input type="text" id="input-sheet" placeholder="https://acnl9ctl8qlc.feishu.cn/sheets/xxxxxxxx">
+      <div class="hint" style="font-size:11px;color:var(--gray-500);margin-top:4px">
+        注：URL 必须是 acnl9ctl8qlc.feishu.cn 域名下的（即"武汉眸佑商贸有限公司"企业里的表）
+      </div>
+    </div>
+
+    <button class="btn btn-outline" id="btn-check-permission" style="margin-bottom:10px">
+      <span class="icon">🔍</span> 检测 bot 权限
+    </button>
+    <div class="status-msg" id="permission-status"></div>
+
+    <button class="btn" id="btn-bind" disabled style="margin-top:10px">绑定 + 自动建分类</button>
+    <div class="status-msg" id="msg-bind"></div>
+  </div>
+
+  <!-- 屏 4：完成 -->
+  <div class="screen" id="screen-done">
+    <div class="user-info" id="user-info-done"></div>
+    <div class="step-title" style="color:var(--green)">🎉 配置完成！</div>
+    <div class="step-desc">配置完成！点下面「🎬 演练一次」按钮去小红书首页，挑一条笔记点扩展图标收录。</div>
+    <div class="tip">
+      <strong>提示</strong>：
+      <ol>
+        <li>分类 sheet 已自动建好：起号图文 / 爆款图 / 爆款文案 / 同行精选 / 潜力款 / 标题公式 / 互动引导 / 待研究</li>
+        <li>如要加新分类，扩展 popup 里点 ➕ 按钮</li>
+        <li>换电脑了重装扩展，重新走一次这个流程即可</li>
+      </ol>
+    </div>
+    <button class="btn" id="btn-try-demo" style="margin-top:16px">
+      🎬 打开示例笔记，演练一次收录
+    </button>
+    <button class="btn btn-outline" id="btn-close" style="margin-top:16px">关闭此页</button>
+  </div>
+</div>
+
+<script src="onboarding.js"></script>
+</body>
+</html>

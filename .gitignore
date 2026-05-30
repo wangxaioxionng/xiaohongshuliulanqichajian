@@ -1,0 +1,48 @@
+# 凭证 / 密钥（绝不提交）
+server/config.json
+**/config.json
+extension/secrets.js
+server/data.db
+**/*.db
+**/.env
+**/*.secret
+**/credentials.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+venv/
+.venv/
+
+# 日志
+*.log
+logs/
+server/logs/
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*~
+
+# 打包产物（可重新构建，不必入库）
+dist/
+xhs-extension-v*.zip
+*.zip
+
+# 本地备份
+_backup_*/
+_backups/
+
+# 本地工作流 / AI 缓存
+.Codex/
+.claude/
+.serena/
+.spec-workflow/
+**/.spec-workflow/

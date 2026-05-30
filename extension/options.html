@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>设置 — 小红书一键收录</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+      max-width: 560px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #18181B;
+      line-height: 1.6;
+    }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    .sub { color: #71717A; font-size: 13px; margin-bottom: 24px; }
+    .field { margin-bottom: 18px; }
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    .hint {
+      font-size: 12px;
+      color: #71717A;
+      margin-top: 4px;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #E4E4E7;
+      border-radius: 6px;
+      font-size: 13px;
+      box-sizing: border-box;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    input:focus {
+      outline: none;
+      border-color: #FF2442;
+    }
+    .btn-row { display: flex; gap: 10px; margin-top: 20px; }
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .btn-primary { background: #FF2442; color: white; }
+    .btn-primary:hover { background: #E61E3C; }
+    .btn-secondary { background: #F4F4F5; color: #3F3F46; }
+
+    .test-result {
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      display: none;
+    }
+    .test-result.show { display: block; }
+    .test-result.ok { background: #F0FDF4; color: #16A34A; }
+    .test-result.fail { background: #FEF2F2; color: #DC2626; }
+  </style>
+</head>
+<body>
+  <h1>📌 小红书一键收录 · 设置</h1>
+  <div class="sub">配置后端 API 地址和鉴权 token。这些信息只保存在本机浏览器存储里。</div>
+
+  <div class="field">
+    <label for="endpoint">API Endpoint</label>
+    <input type="text" id="endpoint" placeholder="http://14.22.112.147:8866">
+    <div class="hint">不带末尾斜杠。本地调试时填 <code>http://127.0.0.1:8765</code></div>
+  </div>
+
+  <div class="field">
+    <label for="token">Auth Token</label>
+    <input type="password" id="token" placeholder="粘贴王小熊私聊发你的 Token">
+    <div class="hint">没有 Token？找王小熊要。Token 只跟你一个人绑定，别外发</div>
+  </div>
+
+  <h2 style="font-size:16px;margin-top:30px;margin-bottom:14px;color:#3F3F46">高级设置</h2>
+
+  <div class="field">
+    <label for="dup-strategy">重复笔记怎么处理？</label>
+    <select id="dup-strategy" style="width:100%;padding:10px 12px;border:1px solid #E4E4E7;border-radius:6px;font-size:13px;background:white;cursor:pointer">
+      <option value="skip">跳过 — 已收过的不重复入库（推荐）</option>
+      <option value="update">更新 — 更新点赞收藏评论数为最新</option>
+      <option value="always_new">总是新增 — 不去重，每次都加新行</option>
+    </select>
+    <div class="hint">这个偏好会跨电脑同步</div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-primary" id="btn-save">💾 保存</button>
+    <button class="btn-secondary" id="btn-test">🔌 测试连接</button>
+  </div>
+
+  <div class="test-result" id="test-result"></div>
+
+  <script src="secrets.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "_comment_1": "把本文件复制为 config.json 并填入真实值。所有 <...> 占位符必须替换。",
+  "_comment_2": "config.json 绝不能提交到 git。auth_token 建议用 `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'` 生成。",
+
+  "app_id": "<飞书自建应用 App ID，例如 cli_xxxxxxxxxxxxxxxx>",
+  "app_secret": "<飞书自建应用 App Secret，从开发者后台 → 凭证与基础信息 获取>",
+  "spreadsheet_token": "<飞书电子表格 URL 路径里的 token，例如 Ind1sh1YthdYlat3uEhc6d4Gn9f>",
+  "sheet_id": "<工作表 sheet_id，用 lark-cli sheets +info 查询>",
+  "auth_token": "<随机字符串，扩展和服务器两端必须一致>",
+
+  "meowload_api_key": "<哼哼猫开发者 API Key，只放服务端 config.json，不要放进扩展>",
+  "meowload_api_url": "https://api.meowload.net/openapi/extract/playlist",
+  "meowload_post_api_url": "https://api.meowload.net/openapi/extract/post",
+  "profile_collect_max_items": 400,
+  "profile_collect_delay": 1.0,
+  "profile_collect_max_image_cols": 20
+}

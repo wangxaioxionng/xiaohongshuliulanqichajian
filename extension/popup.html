@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>收录这条小红书</title>
+  <style>
+    :root {
+      --brand: #FF2442;
+      --brand-hover: #E61E3C;
+      --gray-50: #FAFAFA;
+      --gray-100: #F4F4F5;
+      --gray-200: #E4E4E7;
+      --gray-300: #D4D4D8;
+      --gray-500: #71717A;
+      --gray-700: #3F3F46;
+      --gray-900: #18181B;
+      --green: #16A34A;
+      --orange: #EA580C;
+      --red: #DC2626;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      width: 360px;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      color: var(--gray-900);
+      background: #fff;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--gray-200);
+    }
+    .header .logo {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--brand);
+    }
+    .header .settings {
+      cursor: pointer;
+      color: var(--gray-500);
+      font-size: 16px;
+      user-select: none;
+    }
+    .body { padding: 12px 14px; }
+
+    .dashboard {
+      display: flex;
+      gap: 10px;
+      padding: 8px 12px;
+      background: linear-gradient(135deg, #FFF5F5 0%, #FFEDED 100%);
+      border-radius: 6px;
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+    .dashboard .stat {
+      flex: 1;
+      text-align: center;
+      color: var(--gray-700);
+    }
+    .dashboard .num {
+      display: block;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--brand);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.2;
+    }
+    .dashboard .stat-failed .num { color: var(--red); }
+    .failure-list {
+      margin-bottom: 12px;
+      padding: 10px;
+      background: #FEF2F2;
+      border: 1px solid #FECACA;
+      border-radius: 6px;
+    }
+    .failure-list-header {
+      font-size: 12px;
+      color: #DC2626;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+    .failure-item {
+      background: white;
+      padding: 8px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      font-size: 11px;
+    }
+    .failure-item .url {
+      color: var(--gray-700);
+      word-break: break-all;
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+    }
+    .failure-item .err {
+      color: var(--red);
+      margin-bottom: 4px;
+    }
+    .failure-item .actions {
+      display: flex;
+      gap: 6px;
+    }
+    .failure-item button {
+      padding: 3px 8px;
+      font-size: 11px;
+      border: 1px solid var(--gray-200);
+      background: white;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .failure-item button.retry {
+      background: var(--brand);
+      color: white;
+      border-color: var(--brand);
+    }
+    .recent-toggle {
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--gray-500);
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .recent-toggle:hover { color: var(--brand); }
+    .recent-list {
+      margin-top: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      display: none;
+    }
+    .recent-list.show { display: block; }
+    .recent-item {
+      padding: 8px 10px;
+      border: 1px solid var(--gray-200);
+      border-radius: 6px;
+      margin-bottom: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .recent-item:hover { background: var(--gray-50); }
+    .recent-item .title {
+      color: var(--gray-900);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .recent-item .meta {
+      margin-top: 4px;
+      color: var(--gray-500);
+      font-size: 11px;
+      display: flex;
+      gap: 8px;
+    }
+    .recent-item .sheet-tag {
+      background: var(--gray-100);
+      padding: 1px 6px;
+      border-radius: 3px;
+      color: var(--gray-700);
+    }
+    .page-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-900);
+      line-height: 1.4;
+      margin-bottom: 8px;
+      word-break: break-word;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .page-title.empty { color: var(--gray-500); font-weight: normal; }
+    .url-block {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: var(--gray-700);
+      word-break: break-all;
+      line-height: 1.5;
+      max-height: 50px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .url-block .label { color: var(--gray-500); margin-right: 4px; }
+
+    .field {
+      margin-top: 12px;
+    }
+    .field label {
+      display: block;
+      font-size: 12px;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .field textarea {
+      width: 100%;
+      min-height: 60px;
+      padding: 8px 10px;
+      border: 1px solid var(--gray-200);
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 13px;
+      resize: vertical;
+      outline: none;
+    }
+    .field textarea:focus {
+      border-color: var(--brand);
+    }
+
+    .category-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .category-select {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid var(--gray-200);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      background: #fff;
+      outline: none;
+      cursor: pointer;
+    }
+    .category-select:focus { border-color: var(--brand); }
+    .btn-mini {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      border: 1px solid var(--gray-200);
+      background: var(--gray-50);
+      color: var(--gray-700);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 0;
+    }
+    .btn-mini:hover {
+      background: var(--brand);
+      color: #fff;
+      border-color: var(--brand);
+    }
+
+    .btn-row {
+      margin-top: 14px;
+      display: flex;
+      gap: 8px;
+    }
+    .btn {
+      flex: 1;
+      padding: 10px 14px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-primary {
+      background: var(--brand);
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--brand-hover); }
+    .btn-primary:disabled {
+      background: var(--gray-300);
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      flex: 0 0 auto;
+      background: var(--gray-100);
+      color: var(--gray-700);
+      padding: 10px 12px;
+    }
+    .btn-secondary:hover { background: var(--gray-200); }
+
+    .status {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.6;
+      display: none;
+    }
+    .status.show { display: block; }
+    .status.success { background: #F0FDF4; color: var(--green); border: 1px solid #BBF7D0; }
+    .status.error { background: #FEF2F2; color: var(--red); border: 1px solid #FECACA; }
+    .status.duplicate { background: #FFF7ED; color: var(--orange); border: 1px solid #FED7AA; }
+    .status.loading { background: var(--gray-50); color: var(--gray-700); border: 1px solid var(--gray-200); }
+
+    .status .title { font-weight: 600; margin-bottom: 4px; }
+    .status .meta {
+      display: flex;
+      gap: 12px;
+      margin-top: 4px;
+      font-variant-numeric: tabular-nums;
+    }
+    .status .meta span { color: var(--gray-700); }
+
+    .empty {
+      text-align: center;
+      color: var(--gray-500);
+      padding: 30px 20px;
+    }
+    .empty .icon { font-size: 32px; margin-bottom: 8px; }
+
+    .link {
+      color: var(--brand);
+      text-decoration: none;
+      font-size: 12px;
+    }
+    .link:hover { text-decoration: underline; }
+    .footer {
+      padding: 8px 14px;
+      border-top: 1px solid var(--gray-200);
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--gray-500);
+    }
+
+    /* ---------- 自定义模态框（替代 MV3 popup 禁用的 prompt/confirm/alert） ---------- */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      width: 300px;
+      max-width: calc(100% - 32px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+      animation: modalIn 0.15s ease-out;
+    }
+    @keyframes modalIn {
+      from { transform: scale(0.96); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .modal-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--gray-900);
+      margin-bottom: 6px;
+    }
+    .modal-desc {
+      font-size: 12px;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+    .modal-input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--gray-200);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      margin-bottom: 14px;
+    }
+    .modal-input:focus { border-color: var(--brand); }
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .modal-btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+      font-family: inherit;
+    }
+    .modal-btn-cancel {
+      background: var(--gray-100);
+      color: var(--gray-700);
+    }
+    .modal-btn-cancel:hover { background: var(--gray-200); }
+    .modal-btn-confirm {
+      background: var(--brand);
+      color: #fff;
+    }
+    .modal-btn-confirm:hover { background: var(--brand-hover); }
+    .modal-btn-confirm:disabled {
+      background: var(--gray-300);
+      cursor: not-allowed;
+    }
+
+    /* ---------- 顶部铃铛（更新日志入口） ---------- */
+    .bell-wrap {
+      position: relative;
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--gray-500);
+      transition: color 0.15s;
+    }
+    .bell-wrap:hover { color: var(--brand); }
+    .bell-wrap svg { width: 16px; height: 16px; display: block; }
+    .bell-dot {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #FF2442;
+      border: 1px solid #fff;
+      display: none;
+    }
+    .bell-wrap.has-update .bell-dot { display: block; }
+
+    /* ---------- 更新日志弹窗 ---------- */
+    .cl-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+    }
+    .cl-overlay.show { display: flex; }
+    .cl-card {
+      background: #fff;
+      border-radius: 12px;
+      width: 320px;
+      max-width: calc(100% - 24px);
+      max-height: 80vh;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: modalIn 0.15s ease-out;
+    }
+    .cl-header {
+      padding: 16px 18px 8px;
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .cl-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--gray-900);
+      margin-bottom: 4px;
+    }
+    .cl-subtitle {
+      font-size: 11px;
+      color: var(--gray-500);
+    }
+    .cl-body {
+      padding: 12px 16px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .cl-item {
+      border: 1px solid var(--gray-200);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      background: var(--gray-50);
+    }
+    .cl-item:last-child { margin-bottom: 0; }
+    .cl-item-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: var(--gray-500);
+    }
+    .cl-version {
+      font-weight: 600;
+      color: var(--gray-700);
+      font-variant-numeric: tabular-nums;
+    }
+    .cl-badge {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-weight: 500;
+      line-height: 1.4;
+    }
+    .cl-badge.major,
+    .cl-badge.minor {
+      background: #DBEAFE;
+      color: #1D4ED8;
+    }
+    .cl-badge.patch {
+      background: var(--gray-200);
+      color: var(--gray-700);
+    }
+    .cl-date { margin-left: auto; }
+    .cl-item-title {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--gray-900);
+      margin-bottom: 6px;
+    }
+    .cl-item-detail {
+      font-size: 12px;
+      color: var(--gray-700);
+      line-height: 1.6;
+    }
+    .cl-item-detail h2 {
+      font-size: 12px;
+      font-weight: 600;
+      margin: 8px 0 4px;
+      color: var(--gray-900);
+    }
+    .cl-item-detail ul {
+      margin: 4px 0 4px 18px;
+      padding: 0;
+    }
+    .cl-item-detail li { margin-bottom: 2px; }
+    .cl-item-detail code {
+      background: var(--gray-200);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-family: Menlo, Consolas, monospace;
+    }
+    .cl-item-detail a {
+      color: var(--brand);
+      text-decoration: none;
+    }
+    .cl-item-detail a:hover { text-decoration: underline; }
+    .cl-footer {
+      padding: 10px 16px 14px;
+      border-top: 1px solid var(--gray-100);
+      display: flex;
+      justify-content: flex-end;
+    }
+    .cl-btn-confirm {
+      padding: 8px 18px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      background: var(--brand);
+      color: #fff;
+      font-family: inherit;
+      transition: background 0.15s;
+    }
+    .cl-btn-confirm:hover { background: var(--brand-hover); }
+    .cl-empty {
+      text-align: center;
+      color: var(--gray-500);
+      padding: 24px 12px;
+      font-size: 12px;
+    }
+
+    /* ---------- 首次打开 skeleton 占位（避免冷的"加载中…"文字） ---------- */
+    .skeleton {
+      display: inline-block;
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: skeletonShimmer 1.5s infinite;
+      border-radius: 3px;
+      height: 14px;
+      width: 80px;
+      color: transparent;
+    }
+    .skeleton.skeleton-title { height: 16px; width: 200px; }
+    .skeleton.skeleton-url { height: 12px; width: 240px; }
+    .skeleton.skeleton-line { display: block; height: 12px; margin: 6px 0; }
+    @keyframes skeletonShimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* ============ v4.4.0 对标账号库 ============ */
+    .al-card {
+      display:none;
+      padding:14px;
+      background:linear-gradient(135deg,#F0F9FF 0%,#E0F2FE 100%);
+      border:1px solid #BAE6FD;
+      border-radius:8px;
+      margin-bottom:12px;
+    }
+    .al-card .al-title { font-size:13px; font-weight:600; color:#0C4A6E; margin-bottom:8px }
+    .al-card .al-info { font-size:12px; color:var(--gray-700); margin-bottom:10px; line-height:1.8 }
+    .al-card .al-info b { color:var(--gray-900) }
+    .al-actions { display:flex; gap:8px; }
+    .al-actions .btn { height:36px; padding:0 10px; font-size:12px; }
+    .al-actions .btn-secondary { flex:1; background:#fff; color:#0C4A6E; border:1px solid #BAE6FD; }
+    .al-actions .btn-secondary:hover:not(:disabled) { background:#E0F2FE; }
+    .profile-collect-status {
+      display:none; margin-top:10px; padding:8px 10px; border-radius:6px;
+      font-size:12px; line-height:1.5;
+    }
+    .profile-collect-status b { color:var(--gray-900); }
+    .profile-step { margin-top:4px; }
+    .profile-progress {
+      margin-top:8px; height:6px; background:#E5E7EB; border-radius:999px;
+      overflow:hidden;
+    }
+    .profile-progress-bar {
+      height:100%; width:0%; background:var(--brand); border-radius:999px;
+      transition:width 0.25s ease;
+    }
+    .profile-failures {
+      margin-top:6px; font-size:11px; color:#B91C1C;
+      max-height:54px; overflow:auto;
+    }
+    .profile-collect-status.loading { display:block; background:var(--gray-50); color:var(--gray-700); border:1px solid var(--gray-200); }
+    .profile-collect-status.success { display:block; background:#F0FDF4; color:var(--green); border:1px solid #BBF7D0; }
+    .profile-collect-status.error { display:block; background:#FEF2F2; color:var(--red); border:1px solid #FECACA; }
+
+    .al-modal-overlay {
+      display:none;
+      position:fixed; inset:0;
+      background:rgba(0,0,0,0.5);
+      z-index:9999;
+      align-items:center; justify-content:center;
+    }
+    .al-modal-overlay.show { display:flex }
+    .al-modal-card {
+      background:#fff; border-radius:10px;
+      width:340px; max-height:90vh;
+      display:flex; flex-direction:column;
+    }
+    .al-modal-header {
+      padding:14px 16px; border-bottom:1px solid var(--gray-200);
+      font-weight:600; font-size:14px; color:var(--gray-900);
+    }
+    .al-modal-body {
+      padding:14px 16px; overflow-y:auto; flex:1;
+    }
+    .al-modal-footer {
+      padding:10px 16px; border-top:1px solid var(--gray-200);
+      display:flex; gap:8px; justify-content:flex-end;
+    }
+    .al-field { margin-bottom:10px }
+    .al-field label {
+      display:block; font-size:11px; color:var(--gray-700);
+      margin-bottom:4px; font-weight:500;
+    }
+    .al-field label .req { color:var(--red); margin-left:2px }
+    .al-field input[type="text"],
+    .al-field textarea {
+      width:100%; padding:6px 8px;
+      border:1px solid var(--gray-300); border-radius:4px;
+      font-size:12px; font-family:inherit; outline:none;
+      box-sizing:border-box;
+    }
+    .al-field input[type="text"]:focus,
+    .al-field textarea:focus { border-color:var(--brand) }
+    .al-field textarea { resize:vertical; min-height:40px }
+    .al-field-row { display:flex; gap:8px; margin-bottom:10px }
+    .al-field-row .al-field { flex:1; margin-bottom:0 }
+
+    .al-radio-group { display:flex; gap:6px }
+    .al-radio-btn {
+      flex:1; padding:7px 4px; text-align:center;
+      border:1px solid var(--gray-300); border-radius:4px;
+      font-size:12px; cursor:pointer;
+      background:#fff; color:var(--gray-700);
+      user-select:none;
+    }
+    .al-radio-btn.active {
+      background:var(--brand); color:#fff; border-color:var(--brand);
+    }
+
+    .al-tag-group { display:flex; gap:5px; flex-wrap:wrap }
+    .al-tag {
+      padding:4px 10px;
+      border:1px solid var(--gray-300); border-radius:12px;
+      font-size:11px; cursor:pointer;
+      background:#fff; color:var(--gray-700);
+      user-select:none;
+    }
+    .al-tag.active {
+      background:var(--brand); color:#fff; border-color:var(--brand);
+    }
+
+    .al-result {
+      display:none; margin:10px 16px 0;
+      padding:8px 10px; border-radius:6px;
+      font-size:12px; line-height:1.5;
+    }
+    .al-result.success { background:#F0FDF4; border:1px solid #BBF7D0; color:var(--green) }
+    .al-result.duplicate { background:#FFFBEB; border:1px solid #FED7AA; color:var(--orange) }
+    .al-result.error { background:#FEF2F2; border:1px solid #FECACA; color:var(--red) }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">📌 小红书一键收录</div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <div class="settings" id="btn-logout" title="退出登录">🚪</div>
+      <div class="bell-wrap" id="btn-changelog" title="更新日志">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+          <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+        </svg>
+        <span class="bell-dot" id="bell-dot"></span>
+      </div>
+      <div class="settings" id="btn-settings" title="设置">⚙️</div>
+    </div>
+  </div>
+
+  <div class="body" id="body">
+    <!-- 状态：当前页不是小红书 -->
+    <div id="not-xhs" class="empty" style="display:none">
+      <div class="icon">🤔</div>
+      <div>当前不是小红书笔记页</div>
+      <div style="margin-top:6px;font-size:11px">请在 xiaohongshu.com 的笔记页打开本扩展</div>
+    </div>
+
+    <!-- v4.4.0 账号库卡片：检测到小红书账号主页时显示 -->
+    <div id="account-lib-card" class="al-card">
+      <div class="al-title">📋 当前是小红书账号主页</div>
+      <div class="al-info">
+        账号名：<b id="al-detected-name">检测中...</b><br>
+        粉丝数：<span id="al-detected-fans">-</span> ·
+        获赞收藏：<span id="al-detected-likes">-</span> ·
+        笔记数：<span id="al-detected-notes">-</span>
+      </div>
+      <div class="al-actions">
+        <button id="btn-open-al-modal" class="btn btn-primary">+ 加入对标账号库</button>
+        <button id="btn-profile-collect" class="btn btn-secondary">采集这个账号图文</button>
+      </div>
+      <div id="profile-collect-status" class="profile-collect-status"></div>
+    </div>
+
+    <!-- 主界面 -->
+    <div id="main">
+      <!-- 仪表盘 -->
+      <div class="dashboard" id="dashboard">
+        <div class="stat"><span class="num" id="stat-today">-</span>今天</div>
+        <div class="stat"><span class="num" id="stat-week">-</span>本周</div>
+        <div class="stat"><span class="num" id="stat-total">-</span>累计</div>
+        <div class="stat stat-failed" id="stat-failed-box" style="display:none;cursor:pointer">
+          <span class="num" id="stat-failed">0</span>失败
+        </div>
+      </div>
+
+      <!-- 失败列表（折叠） -->
+      <div class="failure-list" id="failure-list" style="display:none">
+        <div class="failure-list-header">⚠️ 失败的笔记（点「重试」会重新采集）</div>
+        <div id="failure-items"></div>
+      </div>
+
+      <div class="page-title" id="page-title"><span class="skeleton skeleton-title">加载中…</span></div>
+      <div class="url-block" id="url-display">
+        <span class="label">链接</span><span id="current-url"><span class="skeleton skeleton-url">加载中…</span></span>
+      </div>
+
+      <!-- 重复提示 -->
+      <div id="dup-hint" class="status duplicate" style="display:none">
+        <div class="title">⚠️ 这条笔记已经收录过</div>
+        <!-- v4.3.0 B035 fix：整段可点击跳飞书表（不只是底部按钮） -->
+        <div id="dup-detail" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px" title="点击打开飞书表查看这行">行号加载中…</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn-mini" id="btn-dup-open" style="width:auto;height:30px;padding:0 12px;font-size:12px">✏️ 在飞书表里改这行</button>
+          <button class="btn-mini" id="btn-dup-skip" style="width:auto;height:30px;padding:0 12px;font-size:12px">跳过</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="note-input">备注（可选）</label>
+        <textarea id="note-input" placeholder="写点你为啥存这条…例如：开头钩子值得学"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="category-select">收录到哪个分类（sheet）？</label>
+        <div class="category-row">
+          <select id="category-select" class="category-select">
+            <option value="">加载中…</option>
+          </select>
+          <button id="btn-new-category" class="btn-mini" title="新建分类" style="width:auto;min-width:88px;height:36px;padding:0 12px;font-size:13px;font-weight:500;border:1px solid var(--brand);color:var(--brand);background:#fff">+ 新分类</button>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-collect">📥 收录到飞书</button>
+        <button class="btn btn-secondary" id="btn-open-sheet" title="打开飞书表">🔗</button>
+      </div>
+
+      <div class="status" id="status"></div>
+
+      <!-- 最近收录列表（默认展开） -->
+      <div class="recent-toggle" id="recent-toggle">
+        <span id="recent-toggle-icon">▼</span>
+        <span>📜 最近收录</span>
+      </div>
+      <div class="recent-list show" id="recent-list">
+        <div style="padding:8px 10px">
+          <span class="skeleton skeleton-line" style="width:80%"></span>
+          <span class="skeleton skeleton-line" style="width:60%"></span>
+          <span class="skeleton skeleton-line" style="width:70%"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span id="endpoint-hint">未配置</span>
+    <a class="link" href="#" id="link-help">使用帮助</a>
+  </div>
+
+  <!-- 自定义模态框（MV3 popup 禁用 prompt/confirm/alert，必须自建） -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal-card" id="modal-card">
+      <div class="modal-title" id="modal-title">提示</div>
+      <div class="modal-desc" id="modal-desc"></div>
+      <input type="text" class="modal-input" id="modal-input" style="display:none">
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" id="modal-cancel">取消</button>
+        <button class="modal-btn modal-btn-confirm" id="modal-confirm">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- v4.4.0 账号库表单 modal（默认隐藏） -->
+  <div class="al-modal-overlay" id="al-modal-overlay">
+    <div class="al-modal-card">
+      <div class="al-modal-header">📋 加入对标账号库</div>
+      <div class="al-modal-body">
+        <div class="al-field">
+          <label>账号类型 <span class="req">*</span></label>
+          <div class="al-radio-group" id="al-type-group"></div>
+        </div>
+
+        <div class="al-field">
+          <label>账号名 <span class="req">*</span></label>
+          <input type="text" id="al-name-input" placeholder="自动抓取，可手动改">
+        </div>
+
+        <div class="al-field">
+          <label>备注（可选）</label>
+          <textarea id="al-note-input" rows="2" placeholder="例如：这个账号的封面风格值得学 / 适合跟品 / 近期重点观察"></textarea>
+        </div>
+
+        <div class="al-field-row">
+          <div class="al-field">
+            <label>小红书号</label>
+            <input type="text" id="al-xhsid-input">
+          </div>
+          <div class="al-field">
+            <label>IP 属地</label>
+            <input type="text" id="al-ip-input">
+          </div>
+        </div>
+
+        <div class="al-field-row">
+          <div class="al-field">
+            <label>笔记数</label>
+            <input type="text" id="al-notes-input">
+          </div>
+          <div class="al-field">
+            <label>粉丝数</label>
+            <input type="text" id="al-fans-input">
+          </div>
+          <div class="al-field">
+            <label>获赞收藏</label>
+            <input type="text" id="al-likes-input">
+          </div>
+        </div>
+
+        <div class="al-field">
+          <label>简介</label>
+          <textarea id="al-bio-input" rows="2"></textarea>
+        </div>
+
+        <div class="al-field">
+          <label>品类（多选）</label>
+          <div class="al-tag-group" id="al-cat-group"></div>
+        </div>
+
+        <div class="al-field">
+          <label>风格（多选）</label>
+          <div class="al-tag-group" id="al-style-group"></div>
+        </div>
+      </div>
+      <div class="al-result" id="al-result"></div>
+      <div class="al-modal-footer">
+        <button id="al-cancel-btn" class="modal-btn modal-btn-cancel">取消</button>
+        <button id="al-submit-btn" class="modal-btn modal-btn-confirm">✓ 加入账号库</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 更新日志弹窗（默认隐藏） -->
+  <div class="cl-overlay" id="cl-overlay">
+    <div class="cl-card" id="cl-card">
+      <div class="cl-header">
+        <div class="cl-title" id="cl-title">🎉 更新内容</div>
+        <div class="cl-subtitle" id="cl-subtitle"></div>
+      </div>
+      <div class="cl-body" id="cl-body">
+        <div class="cl-empty">加载中…</div>
+      </div>
+      <div class="cl-footer">
+        <button class="cl-btn-confirm" id="cl-confirm">我知道了</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="secrets.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

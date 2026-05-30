@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>使用帮助 — 小红书一键收录</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+      max-width: 720px;
+      margin: 40px auto;
+      padding: 0 24px;
+      color: #18181B;
+      line-height: 1.7;
+    }
+    h1 { font-size: 22px; }
+    h2 { font-size: 16px; margin-top: 28px; border-bottom: 1px solid #E4E4E7; padding-bottom: 4px; }
+    code {
+      background: #F4F4F5;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 13px;
+    }
+    pre {
+      background: #F4F4F5;
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+    .tag {
+      display: inline-block;
+      background: #FF2442;
+      color: white;
+      padding: 1px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-right: 4px;
+    }
+    ol li, ul li { margin-bottom: 4px; }
+    .warning {
+      background: #FEF7E6;
+      border: 1px solid #FED7AA;
+      color: #92400E;
+      padding: 12px 14px;
+      border-radius: 6px;
+      margin: 14px 0;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    .warning strong { color: #B45309; }
+    .placeholder-img {
+      background: #F4F4F5;
+      border: 2px dashed #D4D4D8;
+      border-radius: 6px;
+      padding: 30px 16px;
+      text-align: center;
+      color: #71717A;
+      font-size: 13px;
+      margin: 10px 0;
+    }
+    .placeholder-img .step-label {
+      display: inline-block;
+      background: #FF2442;
+      color: white;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+    .placeholder-img .desc {
+      color: #3F3F46;
+      font-weight: 500;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📌 小红书一键收录 · 使用帮助</h1>
+
+  <h2>三种使用方式</h2>
+  <ol>
+    <li><span class="tag">A</span> 点扩展图标 → 弹窗里可加备注、标签 → 点「收录到飞书」</li>
+    <li><span class="tag">B</span> 在小红书页面任意位置右键 → 选「📥 收录这条小红书笔记到飞书」</li>
+    <li><span class="tag">C</span> 切换标签页时，扩展图标会自动加 <code>✓</code> 徽标提示「已收录」</li>
+  </ol>
+
+  <h2>首次配置</h2>
+  <ol>
+    <li>点扩展图标右上角 ⚙️ 进入设置页</li>
+    <li>API Endpoint：默认 <code>http://14.22.112.147:8866</code></li>
+    <li>Auth Token：王小熊会私聊发你一串字符，粘贴进来</li>
+    <li>点「🔌 测试连接」确认成功</li>
+    <li>「💾 保存」</li>
+  </ol>
+
+  <h2>看采集结果</h2>
+  <p>所有数据写入飞书表《小红书文案收集》：</p>
+  <p><a href="https://my.feishu.cn/sheets/Ind1sh1YthdYlat3uEhc6d4Gn9f">打开飞书表 →</a></p>
+  <p>14 列：序号 / 笔记链接 / 状态 / 标题 / 封面图 / 文案 / 点赞 / 收藏 / 评论 / 分享 / 笔记ID / 采集时间 / 来源 / 我的备注</p>
+
+  <h2>状态徽标说明</h2>
+  <ul>
+    <li><code>✓</code> 绿色 — 当前页笔记已经收录过</li>
+    <li><code>+1</code> 绿色（1.5s 闪现）— 刚刚成功收录一条</li>
+    <li><code>!</code> 红色（1.5s 闪现）— 失败，可在弹窗里看详情</li>
+    <li>无徽标 — 当前页未收录或不是小红书页</li>
+  </ul>
+
+  <h2>常见问题</h2>
+  <h3>1. 点了「收录」一直转圈 / 报「请求失败」</h3>
+  <ul>
+    <li>检查服务器是否在线：浏览器打开 <code>http://14.22.112.147:8866/api/health</code> 应返回 <code>{"ok":true}</code></li>
+    <li>检查 token 是否匹配（设置页 → 测试连接）</li>
+  </ul>
+
+  <h3>2. 报「采集失败：未找到 __INITIAL_STATE__」</h3>
+  <p>小红书前端结构可能临时变了，或这条笔记需要登录才能看。可以稍等几分钟再试，或者把链接拷出来手动看。</p>
+
+  <h3>3. 报「⚠️ 这条笔记已经收录过」</h3>
+  <p>K 列（笔记 ID）已经存在同一条。如需更新互动数，去飞书表手动清空该行 K 列再重新采集。</p>
+
+  <h2>隐私与安全</h2>
+  <ul>
+    <li>单条笔记收录：数据走王小熊服务器（14.22.112.147）写入你自己的飞书表</li>
+    <li>账号全采集：插件先从主页提取最多前 400 篇完整笔记链接，服务端再用第三方单篇 API 逐篇采集并写入你的飞书表；API key 只放服务器，不放扩展</li>
+    <li>Auth Token 保存在浏览器本地存储里，每次收录会作为请求头发给王小熊服务器（不会发给小红书或其他同事）</li>
+    <li>采集是无登录态，只看到笔记公开数据，不读你的小红书账号</li>
+  </ul>
+
+  <h2 id="add-doc-app">📸 如何在飞书表添加「小红书收录助手」应用</h2>
+
+  <p>这是 onboarding 第 3 步绑表前必做的授权操作。<b>仅"协作者-可编辑"权限不够</b>，必须按下面 7 步把 bot 加为「文档应用」，bot 才有写入权限给你建分类 sheet。</p>
+
+  <ol>
+    <li>打开你的飞书表（任意一个 sheet 都行）</li>
+    <li>点击右上角的 <strong>⋯</strong>（三个点菜单）</li>
+    <li>菜单底部找到 <strong>「更多」</strong> → 鼠标悬停</li>
+    <li>点击展开的 <strong>「添加文档应用」</strong></li>
+    <li>在搜索框里输入 <strong>「小红书收录助手」</strong></li>
+    <li>点击应用 → <strong>「添加」</strong></li>
+    <li>添加后应用会显示在「已添加应用」里，且权限是「可管理」</li>
+  </ol>
+
+  <div class="placeholder-img">
+    <span class="step-label">步骤 1-2</span>
+    <div class="desc">[ 截图占位：飞书表右上角，可看到 ⋯ 三点菜单按钮 ]</div>
+    <div style="font-size:12px;color:#71717A;margin-top:6px">截图待补 — 当前用文字描述。位置：飞书表顶部工具栏最右侧</div>
+  </div>
+
+  <div class="placeholder-img">
+    <span class="step-label">步骤 3-4</span>
+    <div class="desc">[ 截图占位：⋯ 菜单展开后，"更多" 子菜单里的「添加文档应用」选项 ]</div>
+    <div style="font-size:12px;color:#71717A;margin-top:6px">截图待补 — 当前用文字描述。在 ⋯ 菜单底部，需要悬停"更多"才能看到</div>
+  </div>
+
+  <div class="placeholder-img">
+    <span class="step-label">步骤 5-6</span>
+    <div class="desc">[ 截图占位：搜索框输入"小红书收录助手"后的结果列表 + 添加按钮 ]</div>
+    <div style="font-size:12px;color:#71717A;margin-top:6px">截图待补 — 当前用文字描述。bot 头像旁边会有蓝色「添加」按钮</div>
+  </div>
+
+  <div class="placeholder-img">
+    <span class="step-label">步骤 7（验证成功）</span>
+    <div class="desc">[ 截图占位：「已添加应用」列表里出现「小红书收录助手」、权限"可管理" ]</div>
+    <div style="font-size:12px;color:#71717A;margin-top:6px">截图待补 — 这是成功状态，看到这个画面就可以回扩展点「检测 bot 权限」了</div>
+  </div>
+
+  <p class="warning">
+    ⚠️ <strong>常见误区</strong>：很多人以为在「文档权限」里把 bot 加为协作者就够了，
+    其实不行。飞书新版权限必须走「添加文档应用」这条路径，bot 才有写权限。<br>
+    <b>判断标准</b>：在 onboarding 屏 3 点「🔍 检测 bot 权限」，显示 ✅ 才算授权成功。
+  </p>
+
+  <p style="text-align:center;margin-top:20px">
+    <a href="onboarding.html" style="color:#FF2442;font-weight:500">← 回到 onboarding 继续配置</a>
+  </p>
+</body>
+</html>
