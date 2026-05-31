@@ -76,7 +76,7 @@ writer = LarkWriter(
 )
 
 # ---------- FastAPI ----------
-app = FastAPI(title="xhs-collect API", version="4.7.0")
+app = FastAPI(title="xhs-collect API", version="4.7.1")
 
 # CORS：v4 加 Authorization header（JWT 用）
 app.add_middleware(

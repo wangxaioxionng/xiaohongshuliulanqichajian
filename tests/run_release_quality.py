@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CHECKS = [
     ("当前标签页识别", ["python3", "tests/verify_current_tab_fallback.py"]),
     ("账号主页文本兜底", ["python3", "tests/verify_profile_account_text_fallback.py"]),
+    ("账号主页状态兜底", ["python3", "tests/verify_profile_account_initial_state.py"]),
     ("账号统计解析", ["python3", "tests/verify_profile_account_stats_parser.py"]),
     ("笔记浮层识别", ["python3", "tests/verify_single_note_modal_detection.py"]),
     ("主页链接质量", ["python3", "tests/verify_profile_collect_link_quality.py"]),
@@ -18,6 +19,7 @@ CHECKS = [
     ("主页采集增量后端", ["python3", "tests/verify_profile_collect_incremental_backend.py"]),
     ("主页采集路由模式", ["python3", "tests/verify_profile_collect_route_mode.py"]),
     ("主页批量接口后端", ["python3", "tests/verify_profile_collect_playlist_backend.py"]),
+    ("主页采集图片嵌入", ["python3", "tests/verify_profile_collect_image_embedding.py"]),
     ("popup 脚本语法", ["node", "--check", "extension/popup.js"]),
     ("background 脚本语法", ["node", "--check", "extension/background.js"]),
     ("manifest JSON", ["python3", "-m", "json.tool", "extension/manifest.json"]),
