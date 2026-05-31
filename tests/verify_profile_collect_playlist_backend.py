@@ -48,6 +48,7 @@ def main() -> None:
     fake_writer = FakeWriter()
     app.writer = fake_writer
     app.PROFILE_COLLECT_REQUEST_DELAY = 0
+    app.PROFILE_COLLECT_EMBED_IMAGES = False
 
     def fake_fetch_profile_posts(profile_url: str, max_items: int):
         assert profile_url == "https://www.xiaohongshu.com/user/profile/user1"

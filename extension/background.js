@@ -442,6 +442,451 @@ async function saveProfileCheckpoint(profileUrl, patch) {
   return checkpoint;
 }
 
+function installXhsProfileApiInterceptor(options) {
+  const cfg = (typeof options === "object" && options) ? options : {};
+  const maxItems = Math.max(1, Number(cfg.limit || 400));
+  const SOURCE = "xhs-collect-profile-interceptor";
+  const REQUEST_SOURCE = "xhs-collect-profile-runner";
+  const state = window.__xhsCollectProfileInterceptorState || {
+    installed: false,
+    byId: {},
+    order: [],
+    initialStateTimer: null,
+    messageListenerAdded: false,
+    historyPatched: false,
+  };
+  window.__xhsCollectProfileInterceptorState = state;
+  state.maxItems = maxItems;
+
+  function endpointKind(rawUrl) {
+    try {
+      const u = new URL(String(rawUrl || ""), location.href);
+      const path = u.pathname || "";
+      if (path.includes("/api/sns/web/v1/user_posted")) return "user_posted";
+      if (path.includes("/api/sns/web/v1/search/notes")) return "search_notes";
+      if (path.includes("/api/sns/web/v1/homefeed")) return "homefeed";
+      if (path.includes("/api/sns/web/v1/feed")) return "feed";
+    } catch (e) {}
+    return "";
+  }
+
+  function unwrap(value) {
+    if (!value || typeof value !== "object") return value;
+    if (value.value !== undefined) return value.value;
+    if (value._value !== undefined) return value._value;
+    if (value._rawValue !== undefined) return value._rawValue;
+    return value;
+  }
+
+  function firstString(values) {
+    for (const value of values) {
+      if (value === null || value === undefined) continue;
+      const text = String(value).trim();
+      if (text) return text;
+    }
+    return "";
+  }
+
+  function coverUrl(cover) {
+    if (!cover || typeof cover !== "object") return "";
+    return firstString([
+      cover.url_default,
+      cover.urlDefault,
+      cover.url_pre,
+      cover.urlPre,
+      cover.url,
+      cover.file_id,
+      cover.fileId,
+    ]);
+  }
+
+  function addCandidate(item, kind, out) {
+    if (!item || typeof item !== "object") return;
+    const card = item.note_card || item.noteCard || item.note || item;
+    if (!card || typeof card !== "object") return;
+    const noteId = firstString([
+      card.note_id,
+      card.noteId,
+      card.id,
+      item.note_id,
+      item.noteId,
+      item.id,
+    ]);
+    if (!noteId) return;
+    const xsecToken = firstString([
+      item.xsec_token,
+      item.xsecToken,
+      card.xsec_token,
+      card.xsecToken,
+    ]);
+    const xsecSource = kind === "user_posted" ? "pc_user" : "pc_feed";
+    let url = "";
+    try {
+      const u = new URL(`/explore/${noteId}`, location.origin);
+      if (xsecToken) u.searchParams.set("xsec_token", xsecToken);
+      u.searchParams.set("xsec_source", xsecSource);
+      url = u.toString();
+    } catch (e) {}
+    const cover = card.cover || item.cover || {};
+    out.push({
+      id: noteId,
+      note_id: noteId,
+      title: firstString([
+        card.display_title,
+        card.displayTitle,
+        card.title,
+        item.display_title,
+        item.displayTitle,
+        item.title,
+      ]),
+      cover: coverUrl(cover),
+      width: Number(cover.width || card.width || item.width || 0) || 0,
+      height: Number(cover.height || card.height || item.height || 0) || 0,
+      xsec_token: xsecToken,
+      xsec_source: xsecSource,
+      url,
+      api: kind,
+    });
+  }
+
+  function extractNotes(payload, kind) {
+    const out = [];
+    const root = payload && payload.data ? payload.data : payload;
+    const lists = [];
+    if (root && Array.isArray(root.notes)) lists.push(root.notes);
+    if (root && Array.isArray(root.items)) lists.push(root.items);
+    if (root && Array.isArray(root.feeds)) lists.push(root.feeds);
+    if (Array.isArray(root)) lists.push(root);
+    for (const list of lists) {
+      for (const item of list) addCandidate(item, kind, out);
+    }
+    if (out.length) return out;
+
+    const visited = new Set();
+    function visit(value, depth) {
+      value = unwrap(value);
+      if (!value || typeof value !== "object" || depth > 6) return;
+      if (visited.has(value)) return;
+      visited.add(value);
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item, depth + 1);
+        return;
+      }
+      addCandidate(value, kind, out);
+      for (const key of ["data", "items", "notes", "feeds", "list", "noteDetailMap", "value"]) {
+        if (value[key] !== undefined) visit(value[key], depth + 1);
+      }
+    }
+    visit(root, 0);
+    return out;
+  }
+
+  function snapshotNotes() {
+    return state.order.map((id) => state.byId[id]).filter(Boolean);
+  }
+
+  function postNotes(notes, stage) {
+    if (!notes || !notes.length) return;
+    window.postMessage({
+      source: SOURCE,
+      type: "xhs_profile_api_notes",
+      stage,
+      notes,
+      total_captured: state.order.length,
+    }, location.origin);
+  }
+
+  function storeNotes(notes, stage) {
+    const changed = [];
+    for (const note of notes || []) {
+      if (!note || !note.id) continue;
+      const old = state.byId[note.id];
+      if (!old) {
+        if (state.order.length >= state.maxItems) continue;
+        state.byId[note.id] = note;
+        state.order.push(note.id);
+        changed.push(note);
+      } else if (!old.xsec_token && note.xsec_token) {
+        state.byId[note.id] = { ...old, ...note };
+        changed.push(state.byId[note.id]);
+      }
+    }
+    postNotes(changed, stage);
+  }
+
+  function handlePayload(rawUrl, payload) {
+    const kind = endpointKind(rawUrl);
+    if (!kind || !payload) return;
+    storeNotes(extractNotes(payload, kind), `api:${kind}`);
+  }
+
+  function handleText(rawUrl, text) {
+    if (!text || !endpointKind(rawUrl)) return;
+    try {
+      handlePayload(rawUrl, JSON.parse(text));
+    } catch (e) {}
+  }
+
+  function scanInitialState() {
+    const pageState = window.__INITIAL_STATE__;
+    if (!pageState || typeof pageState !== "object") return;
+    const kind = location.pathname.includes("/user/profile/") ? "user_posted" : "homefeed";
+    const roots = [
+      pageState.user && pageState.user.notes,
+      pageState.feed && pageState.feed.feeds,
+      pageState.search && pageState.search.feeds,
+      pageState.note && pageState.note.noteDetailMap,
+    ];
+    for (const root of roots) {
+      if (root !== undefined) storeNotes(extractNotes(root, kind), "initial_state");
+    }
+  }
+
+  function startInitialStatePolling() {
+    if (state.initialStateTimer) clearInterval(state.initialStateTimer);
+    let rounds = 0;
+    scanInitialState();
+    state.initialStateTimer = setInterval(() => {
+      rounds += 1;
+      scanInitialState();
+      if (rounds >= 20) {
+        clearInterval(state.initialStateTimer);
+        state.initialStateTimer = null;
+      }
+    }, 500);
+  }
+
+  function profileUserIdFromPage() {
+    try {
+      const pathMatch = location.pathname.match(/\/user\/profile\/([^/?#]+)/);
+      const stateUser = window.__INITIAL_STATE__ && window.__INITIAL_STATE__.user;
+      const queries = unwrap(stateUser && stateUser.noteQueries);
+      const firstQuery = Array.isArray(queries) ? queries[0] : null;
+      return firstString([
+        firstQuery && firstQuery.userId,
+        firstQuery && firstQuery.user_id,
+        pathMatch && pathMatch[1],
+      ]);
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function profileXsecTokenFromPage() {
+    try {
+      return new URL(location.href).searchParams.get("xsec_token") || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function lastCapturedNoteId() {
+    for (let i = state.order.length - 1; i >= 0; i -= 1) {
+      const id = state.order[i];
+      if (id) return id;
+    }
+    return "";
+  }
+
+  function initialProfilePageQuery() {
+    const stateUser = window.__INITIAL_STATE__ && window.__INITIAL_STATE__.user;
+    const queries = unwrap(stateUser && stateUser.noteQueries);
+    const firstQuery = Array.isArray(queries) ? queries[0] : null;
+    const cursor = firstString([
+      firstQuery && firstQuery.cursor,
+      lastCapturedNoteId(),
+    ]);
+    return {
+      num: Math.min(50, Math.max(1, Number((firstQuery && firstQuery.num) || 30))),
+      cursor,
+      userId: profileUserIdFromPage(),
+      page: Math.max(1, Number((firstQuery && firstQuery.page) || 1)),
+      hasMore: !firstQuery || firstQuery.hasMore !== false,
+      xsecToken: profileXsecTokenFromPage(),
+    };
+  }
+
+  function noteIdFromApiItem(item) {
+    if (!item || typeof item !== "object") return "";
+    const card = item.note_card || item.noteCard || item.note || item;
+    return firstString([
+      item.id,
+      item.note_id,
+      item.noteId,
+      card.id,
+      card.note_id,
+      card.noteId,
+    ]);
+  }
+
+  function userPostedUrl(query) {
+    const u = new URL("/api/sns/web/v1/user_posted", location.origin);
+    u.searchParams.set("num", String(query.num || 30));
+    u.searchParams.set("cursor", query.cursor || "");
+    u.searchParams.set("user_id", query.userId || "");
+    u.searchParams.set("image_formats", "jpg,webp,avif");
+    if (query.xsecToken) u.searchParams.set("xsec_token", query.xsecToken);
+    u.searchParams.set("xsec_source", "pc_user");
+    return u.toString();
+  }
+
+  async function tryFetchUserPostedPage(query) {
+    if (typeof fetch !== "function") return { ok: false, reason: "fetch_unavailable" };
+    const url = userPostedUrl(query);
+    const resp = await fetch(url, {
+      credentials: "include",
+      headers: {
+        accept: "application/json, text/plain, */*",
+      },
+    });
+    let payload = null;
+    try {
+      payload = await resp.clone().json();
+    } catch (e) {
+      try {
+        payload = JSON.parse(await resp.text());
+      } catch (e2) {}
+    }
+    if (!resp.ok || !payload) {
+      return { ok: false, reason: `http_${resp.status || 0}` };
+    }
+    handlePayload(url, payload);
+    const data = payload.data || {};
+    const notes = Array.isArray(data.notes) ? data.notes : [];
+    const lastNote = notes.length ? notes[notes.length - 1] : null;
+    const nextCursor = firstString([
+      data.cursor,
+      data.next_cursor,
+      data.nextCursor,
+      lastNote && noteIdFromApiItem(lastNote),
+    ]);
+    const hasMore = data.has_more !== undefined
+      ? !!data.has_more
+      : (data.hasMore !== undefined ? !!data.hasMore : notes.length >= query.num);
+    return {
+      ok: true,
+      notesCount: notes.length,
+      nextCursor,
+      hasMore,
+    };
+  }
+
+  async function startActiveUserPostedPaging() {
+    if (state.pagerRunning || state.pagerDone) return;
+    scanInitialState();
+    const query = initialProfilePageQuery();
+    if (!query.userId || !query.cursor || !query.hasMore) {
+      state.pagerDone = true;
+      return;
+    }
+    state.pagerRunning = true;
+    let pages = 0;
+    const maxPages = Math.min(24, Math.ceil(state.maxItems / Math.max(1, query.num)) + 4);
+    try {
+      while (state.order.length < state.maxItems && query.hasMore && query.cursor && pages < maxPages) {
+        pages += 1;
+        const before = state.order.length;
+        const result = await tryFetchUserPostedPage(query);
+        if (!result.ok) break;
+        query.page += 1;
+        query.cursor = result.nextCursor || "";
+        query.hasMore = !!result.hasMore;
+        if (state.order.length <= before && !result.notesCount) break;
+        await new Promise((resolve) => {
+          setTimeout(resolve, 800 + Math.floor(Math.random() * 800));
+        });
+      }
+    } catch (e) {
+      console.warn("[xhs-collect] 主动分页 user_posted 失败，继续依赖页面滚动触发：", e);
+    } finally {
+      state.pagerRunning = false;
+      state.pagerDone = true;
+      postNotes(snapshotNotes(), "active_paging_done");
+    }
+  }
+
+  if (!state.messageListenerAdded) {
+    window.addEventListener("message", (event) => {
+      if (event.source !== window) return;
+      const data = event.data || {};
+      if (data.source !== REQUEST_SOURCE) return;
+      if (data.type === "xhs_profile_get_capture") {
+        scanInitialState();
+        postNotes(snapshotNotes(), "snapshot");
+      }
+      if (data.type === "xhs_profile_start_paging") {
+        startActiveUserPostedPaging();
+      }
+    });
+    state.messageListenerAdded = true;
+  }
+
+  if (!state.historyPatched) {
+    const onRouteChange = () => setTimeout(startInitialStatePolling, 100);
+    for (const name of ["pushState", "replaceState"]) {
+      const original = history[name];
+      if (typeof original !== "function") continue;
+      history[name] = function patchedHistoryState() {
+        const result = original.apply(this, arguments);
+        onRouteChange();
+        return result;
+      };
+    }
+    window.addEventListener("popstate", onRouteChange);
+    state.historyPatched = true;
+  }
+
+  if (!state.installed) {
+    const originalOpen = XMLHttpRequest.prototype.open;
+    const originalSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function patchedOpen(method, url) {
+      try {
+        this.__xhsCollectProfileUrl = String(url || "");
+      } catch (e) {}
+      return originalOpen.apply(this, arguments);
+    };
+    XMLHttpRequest.prototype.send = function patchedSend() {
+      try {
+        this.addEventListener("loadend", function onXhsProfileXhrLoadEnd() {
+          try {
+            const rawUrl = this.__xhsCollectProfileUrl || this.responseURL || "";
+            if (!endpointKind(rawUrl)) return;
+            if (this.responseType === "json") {
+              handlePayload(rawUrl, this.response);
+            } else if (!this.responseType || this.responseType === "text") {
+              handleText(rawUrl, this.responseText || "");
+            }
+          } catch (e) {}
+        }, { once: true });
+      } catch (e) {}
+      return originalSend.apply(this, arguments);
+    };
+
+    if (typeof window.fetch === "function") {
+      const originalFetch = window.fetch;
+      window.fetch = function patchedFetch(input) {
+        const rawUrl = typeof input === "string" ? input : (input && input.url) || "";
+        return originalFetch.apply(this, arguments).then((response) => {
+          try {
+            const responseUrl = rawUrl || response.url || "";
+            if (endpointKind(responseUrl)) {
+              response.clone().json().then((payload) => {
+                handlePayload(responseUrl, payload);
+              }).catch(() => {});
+            }
+          } catch (e) {}
+          return response;
+        });
+      };
+    }
+    state.installed = true;
+  }
+
+  startInitialStatePolling();
+  postNotes(snapshotNotes(), "installed");
+  return { installed: true, captured: state.order.length };
+}
+
 async function getProfileCollectState() {
   const data = await storageGet([PROFILE_COLLECT_STATE_KEY]);
   return data[PROFILE_COLLECT_STATE_KEY] || null;
@@ -554,6 +999,55 @@ function runProfileLinkExtractionInPage(options) {
       } catch (e) {}
     }
 
+    let capturedApiTotal = 0;
+
+    function addCapturedNotes(notes) {
+      const before = seen.size;
+      for (const note of notes || []) {
+        if (seen.size >= maxLinks) break;
+        if (note && note.url) {
+          addUrl(note.url);
+        } else if (note) {
+          addNoteWithToken(
+            note.id || note.note_id || note.noteId,
+            note.xsec_token || note.xsecToken,
+            note.xsec_source || note.xsecSource,
+          );
+        }
+      }
+      return seen.size > before;
+    }
+
+    function requestCapturedNotes() {
+      try {
+        window.postMessage({
+          source: "xhs-collect-profile-runner",
+          type: "xhs_profile_get_capture",
+        }, location.origin);
+      } catch (e) {}
+    }
+
+    function requestActivePaging() {
+      try {
+        window.postMessage({
+          source: "xhs-collect-profile-runner",
+          type: "xhs_profile_start_paging",
+        }, location.origin);
+      } catch (e) {}
+    }
+
+    function onCapturedNotes(event) {
+      if (event.source !== window) return;
+      const data = event.data || {};
+      if (data.source !== "xhs-collect-profile-interceptor") return;
+      if (data.type !== "xhs_profile_api_notes") return;
+      capturedApiTotal = Math.max(capturedApiTotal, Number(data.total_captured || 0));
+      addCapturedNotes(data.notes || []);
+    }
+    window.addEventListener("message", onCapturedNotes);
+    requestCapturedNotes();
+    requestActivePaging();
+
     function unwrapStateValue(value) {
       if (!value || typeof value !== "object") return value;
       if (value.value !== undefined) return value.value;
@@ -599,6 +1093,7 @@ function runProfileLinkExtractionInPage(options) {
 
     function collectOnce() {
       collectFromInitialState();
+      requestCapturedNotes();
       const anchors = Array.from(document.querySelectorAll(
         'a[href*="/explore/"], a[href*="/discovery/item/"]',
       ));
@@ -655,6 +1150,7 @@ function runProfileLinkExtractionInPage(options) {
           rounds,
           checkpoint_saved: lastCheckpointSaved,
           api_ready_count: Array.from(seen.values()).filter(hasXsecToken).length,
+          captured_api_count: capturedApiTotal,
         });
         while (seen.size < maxLinks && stableRounds < 10 && rounds < 220) {
           rounds += 1;
@@ -681,6 +1177,7 @@ function runProfileLinkExtractionInPage(options) {
             longPauses,
             checkpoint_saved: lastCheckpointSaved,
             api_ready_count: Array.from(seen.values()).filter(hasXsecToken).length,
+            captured_api_count: capturedApiTotal,
           });
         }
         maybeSendCheckpoint("scanning");
@@ -703,6 +1200,7 @@ function runProfileLinkExtractionInPage(options) {
               checkpoint_saved: lastCheckpointSaved,
               pauseSeconds: Math.round(pauseMs / 1000),
               api_ready_count: Array.from(seen.values()).filter(hasXsecToken).length,
+              captured_api_count: capturedApiTotal,
             });
             await wait(pauseMs);
           }
@@ -723,6 +1221,7 @@ function runProfileLinkExtractionInPage(options) {
             checkpoint_saved: noteUrls.length,
             api_ready_count: apiReadyCount,
             incomplete_link_count: Math.max(0, noteUrls.length - apiReadyCount),
+            captured_api_count: capturedApiTotal,
           },
         });
       } catch (e) {
@@ -730,6 +1229,7 @@ function runProfileLinkExtractionInPage(options) {
           error: String(e.message || e || "页面提取失败"),
         });
       } finally {
+        window.removeEventListener("message", onCapturedNotes);
         window.__xhsProfileCollectRunning = false;
       }
     })();
@@ -801,6 +1301,16 @@ async function startProfileCollect(payload) {
       resumed: true,
     });
     return { ok: true, state: await getProfileCollectState() };
+  }
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: payload.tab_id },
+      world: "MAIN",
+      func: installXhsProfileApiInterceptor,
+      args: [{ limit: PROFILE_COLLECT_LIMIT }],
+    });
+  } catch (e) {
+    console.warn("[xhs-collect] MAIN world 小红书接口监听器注入失败，继续使用 DOM 兜底：", e);
   }
   const result = await chrome.scripting.executeScript({
     target: { tabId: payload.tab_id },
@@ -1064,6 +1574,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         stable_rounds: msg.stableRounds || 0,
         long_pauses: msg.longPauses || 0,
         pause_seconds: msg.pauseSeconds || 0,
+        captured_api_count: msg.captured_api_count || state.captured_api_count || 0,
         message: "正在慢速翻主页提取笔记链接",
       });
     });
@@ -1088,6 +1599,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         checkpoint_saved: saved,
         api_ready_count: apiReadyCount,
         incomplete_link_count: Math.max(0, saved - apiReadyCount),
+        captured_api_count: msg.captured_api_count || state.captured_api_count || 0,
         total_limit: msg.limit || PROFILE_COLLECT_LIMIT,
         message: `已保存 ${saved} 条链接，其中 ${apiReadyCount} 条可提交 API，可断点续采`,
       });

@@ -1299,18 +1299,38 @@ function parseProfileStatsFromText(bodyText) {
   const text = String(bodyText || "").replace(/[,，]/g, "").replace(/\s+/g, " ");
   const numberPattern = "\\d+(?:\\.\\d+)?\\s*(?:万|w|W|m|M|k|K)?";
   const labelPattern = "获赞与收藏|获赞收藏|粉丝|关注|笔记|作品|获赞";
+  const stats = {
+    follow_count: "",
+    notes_count: "",
+    fans_count: "",
+    likes_count: "",
+  };
   const profileBlockRe = new RegExp(
     `(${numberPattern})\\s*关注\\s*(${numberPattern})\\s*粉丝\\s*(${numberPattern})\\s*(?:获赞与收藏|获赞收藏|获赞)`,
   );
   const profileBlockMatch = text.match(profileBlockRe);
   if (profileBlockMatch) {
-    return {
-      follow_count: profileBlockMatch[1].replace(/\s+/g, ""),
-      notes_count: "",
-      fans_count: profileBlockMatch[2].replace(/\s+/g, ""),
-      likes_count: profileBlockMatch[3].replace(/\s+/g, ""),
-    };
+    stats.follow_count = profileBlockMatch[1].replace(/\s+/g, "");
+    stats.fans_count = profileBlockMatch[2].replace(/\s+/g, "");
+    stats.likes_count = profileBlockMatch[3].replace(/\s+/g, "");
   }
+
+  function fillExplicitNotesCount(overwrite = false) {
+    const patterns = [
+      new RegExp(`(?:笔记|作品)\\s*[・·:：]\\s*(${numberPattern})`, "i"),
+      new RegExp(`(?:笔记|作品)\\s+(${numberPattern})`, "i"),
+      new RegExp(`(${numberPattern})\\s*(?:篇)?\\s*(?:笔记|作品)`, "i"),
+    ];
+    for (const re of patterns) {
+      const match = text.match(re);
+      if (match && match[1] && (overwrite || !stats.notes_count)) {
+        stats.notes_count = match[1].replace(/\s+/g, "");
+        return;
+      }
+    }
+  }
+  fillExplicitNotesCount();
+
   const tokenRe = new RegExp(`(${numberPattern})|(${labelPattern})`, "g");
   const tokens = [];
   let m;
@@ -1344,13 +1364,6 @@ function parseProfileStatsFromText(bodyText) {
   }
 
   const preferNumberBefore = numberBeforeLabel >= labelBeforeNumber;
-  const stats = {
-    follow_count: "",
-    notes_count: "",
-    fans_count: "",
-    likes_count: "",
-  };
-
   function fillFromNumberBefore(overwrite = false) {
     for (let i = 0; i < tokens.length - 1; i += 1) {
       if (tokens[i].type !== "number" || tokens[i + 1].type !== "label") continue;
@@ -1374,10 +1387,161 @@ function parseProfileStatsFromText(bodyText) {
     fillFromLabelBefore();
     fillFromNumberBefore();
   }
+  fillExplicitNotesCount(true);
   return stats;
 }
 
 function extractAccountInfoFromPage() {
+  function valueToText(value) {
+    if (value === null || value === undefined) return "";
+    return String(value).trim();
+  }
+
+  function pickFirstValue(values) {
+    for (const value of values) {
+      const text = valueToText(value);
+      if (text) return text;
+    }
+    return "";
+  }
+
+  function extractAccountInfoFromInitialState() {
+    const state = (typeof window !== "undefined" && window.__INITIAL_STATE__)
+      ? window.__INITIAL_STATE__
+      : null;
+    const userStore = state && state.user ? state.user : null;
+    const pageData = userStore && userStore.userPageData ? userStore.userPageData : null;
+    if (!pageData || typeof pageData !== "object") return null;
+
+    const basic = pageData.basicInfo || {};
+    const tabPublic = pageData.tabPublic || {};
+    const collectionNote = tabPublic.collectionNote || {};
+    const interactions = Array.isArray(pageData.interactions)
+      ? pageData.interactions
+      : [];
+    const byType = {};
+    const byName = {};
+    for (const item of interactions) {
+      if (!item || typeof item !== "object") continue;
+      const count = pickFirstValue([item.count, item.i18nCount]);
+      if (item.type) byType[String(item.type)] = count;
+      if (item.name) byName[String(item.name)] = count;
+    }
+
+    const tags = Array.isArray(pageData.tags)
+      ? pageData.tags.map((tag) => valueToText(tag && tag.name)).filter(Boolean)
+      : [];
+
+    return {
+      account_name: pickFirstValue([basic.nickname, basic.nickName]),
+      profile_url: location.href,
+      xhs_id: pickFirstValue([basic.redId, basic.red_id]),
+      follow_count: pickFirstValue([byType.follows, byName["关注"]]),
+      notes_count: pickFirstValue([collectionNote.count, tabPublic.noteCount, pageData.notesCount]),
+      fans_count: pickFirstValue([byType.fans, byName["粉丝"]]),
+      likes_count: pickFirstValue([byType.interaction, byName["获赞与收藏"], byName["获赞收藏"], byName["获赞"]]),
+      ip_location: pickFirstValue([basic.ipLocation, basic.ip_location]),
+      bio: pickFirstValue([basic.desc, tags.join(" ")]),
+    };
+  }
+
+  function parseStatsFromText(bodyTextForStats) {
+    const text = String(bodyTextForStats || "").replace(/[,，]/g, "").replace(/\s+/g, " ");
+    const numberPattern = "\\d+(?:\\.\\d+)?\\s*(?:万|w|W|m|M|k|K)?";
+    const labelPattern = "获赞与收藏|获赞收藏|粉丝|关注|笔记|作品|获赞";
+    const stats = {
+      follow_count: "",
+      notes_count: "",
+      fans_count: "",
+      likes_count: "",
+    };
+    const profileBlockRe = new RegExp(
+      `(${numberPattern})\\s*关注\\s*(${numberPattern})\\s*粉丝\\s*(${numberPattern})\\s*(?:获赞与收藏|获赞收藏|获赞)`,
+    );
+    const profileBlockMatch = text.match(profileBlockRe);
+    if (profileBlockMatch) {
+      stats.follow_count = profileBlockMatch[1].replace(/\s+/g, "");
+      stats.fans_count = profileBlockMatch[2].replace(/\s+/g, "");
+      stats.likes_count = profileBlockMatch[3].replace(/\s+/g, "");
+    }
+
+    function fillExplicitNotesCount(overwrite = false) {
+      const patterns = [
+        new RegExp(`(?:笔记|作品)\\s*[・·:：]\\s*(${numberPattern})`, "i"),
+        new RegExp(`(?:笔记|作品)\\s+(${numberPattern})`, "i"),
+        new RegExp(`(${numberPattern})\\s*(?:篇)?\\s*(?:笔记|作品)`, "i"),
+      ];
+      for (const re of patterns) {
+        const match = text.match(re);
+        if (match && match[1] && (overwrite || !stats.notes_count)) {
+          stats.notes_count = match[1].replace(/\s+/g, "");
+          return;
+        }
+      }
+    }
+    fillExplicitNotesCount();
+
+    const tokenRe = new RegExp(`(${numberPattern})|(${labelPattern})`, "g");
+    const tokens = [];
+    let m;
+    while ((m = tokenRe.exec(text)) !== null) {
+      if (m[1]) {
+        tokens.push({ type: "number", value: m[1].replace(/\s+/g, "") });
+      } else if (m[2]) {
+        tokens.push({ type: "label", value: m[2] });
+      }
+    }
+
+    function keyForLabel(label) {
+      if (label === "关注") return "follow_count";
+      if (label === "粉丝") return "fans_count";
+      if (label === "笔记" || label === "作品") return "notes_count";
+      if (label === "获赞与收藏" || label === "获赞收藏" || label === "获赞") {
+        return "likes_count";
+      }
+      return "";
+    }
+
+    let numberBeforeLabel = 0;
+    let labelBeforeNumber = 0;
+    for (let i = 0; i < tokens.length - 1; i += 1) {
+      if (tokens[i].type === "number" && tokens[i + 1].type === "label") {
+        numberBeforeLabel += 1;
+      }
+      if (tokens[i].type === "label" && tokens[i + 1].type === "number") {
+        labelBeforeNumber += 1;
+      }
+    }
+
+    const preferNumberBefore = numberBeforeLabel >= labelBeforeNumber;
+
+    function fillFromNumberBefore(overwrite = false) {
+      for (let i = 0; i < tokens.length - 1; i += 1) {
+        if (tokens[i].type !== "number" || tokens[i + 1].type !== "label") continue;
+        const key = keyForLabel(tokens[i + 1].value);
+        if (key && (overwrite || !stats[key])) stats[key] = tokens[i].value;
+      }
+    }
+
+    function fillFromLabelBefore(overwrite = false) {
+      for (let i = 0; i < tokens.length - 1; i += 1) {
+        if (tokens[i].type !== "label" || tokens[i + 1].type !== "number") continue;
+        const key = keyForLabel(tokens[i].value);
+        if (key && (overwrite || !stats[key])) stats[key] = tokens[i + 1].value;
+      }
+    }
+
+    if (preferNumberBefore) {
+      fillFromNumberBefore();
+      fillFromLabelBefore();
+    } else {
+      fillFromLabelBefore();
+      fillFromNumberBefore();
+    }
+    fillExplicitNotesCount(true);
+    return stats;
+  }
+
   function pickText(selectors) {
     for (const sel of selectors) {
       const el = document.querySelector(sel);
@@ -1397,6 +1561,7 @@ function extractAccountInfoFromPage() {
   }
 
   const bodyText = document.body ? (document.body.innerText || "") : "";
+  const stateInfo = extractAccountInfoFromInitialState() || {};
 
   function cleanAccountNameCandidate(value) {
     const text = String(value || "")
@@ -1428,7 +1593,7 @@ function extractAccountInfoFromPage() {
   }
 
   // 账号名
-  let account_name = pickText([
+  let account_name = stateInfo.account_name || pickText([
     ".user-name", ".user-info-name",
     '[class*="user-name"]', '[class*="userName"]',
     '[class*="nickname"]', '[class*="nick-name"]',
@@ -1437,31 +1602,32 @@ function extractAccountInfoFromPage() {
   if (!account_name) account_name = inferAccountNameFromText();
 
   // 简介
-  const bio = pickText([
+  const bio = stateInfo.bio || pickText([
     ".user-desc", ".user-info-desc",
     '[class*="user-desc"]', '[class*="user-content"]',
     ".desc", ".bio",
   ]);
 
   // 小红书号：文本里搜 "小红书号：xxx"
-  let xhs_id = "";
+  let xhs_id = stateInfo.xhs_id || "";
   const idMatch = bodyText.match(/小红书号[：:\s]*([a-zA-Z0-9_\-]+)/);
-  if (idMatch) xhs_id = idMatch[1];
+  if (!xhs_id && idMatch) xhs_id = idMatch[1];
 
   // IP 属地：文本里搜 "IP 属地：xxx"
-  let ip_location = "";
+  let ip_location = stateInfo.ip_location || "";
   const ipMatch = bodyText.match(/IP\s*[属:址]?\s*地[：:\s]*([^\s\n\r·,，|]+)/);
-  if (ipMatch) ip_location = ipMatch[1];
+  if (!ip_location && ipMatch) ip_location = ipMatch[1];
 
-  const profileStats = parseProfileStatsFromText(bodyText);
-  const notes_count = profileStats.notes_count || "";
-  const fans_count = profileStats.fans_count || "";
-  const likes_count = profileStats.likes_count || "";
+  const profileStats = parseStatsFromText(bodyText);
+  const notes_count = stateInfo.notes_count || profileStats.notes_count || "";
+  const fans_count = stateInfo.fans_count || profileStats.fans_count || "";
+  const likes_count = stateInfo.likes_count || profileStats.likes_count || "";
 
   return {
     account_name,
     profile_url: location.href,
     xhs_id,
+    follow_count: stateInfo.follow_count || profileStats.follow_count || "",
     notes_count,
     fans_count,
     likes_count,
@@ -1885,6 +2051,47 @@ const AL_STATE = {
   selectedStyles: [],
 };
 
+function hasUsefulAccountInfo(data) {
+  return !!(
+    data &&
+    (
+      data.account_name ||
+      data.xhs_id ||
+      data.fans_count ||
+      data.likes_count ||
+      data.notes_count
+    )
+  );
+}
+
+function waitForAccountInfo(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function scrapeAccountInfoFromTab(tabId) {
+  let lastResult = null;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    for (const world of ["MAIN", "ISOLATED"]) {
+      try {
+        const request = {
+          target: { tabId },
+          func: extractAccountInfoFromPage,
+        };
+        if (world === "MAIN") request.world = "MAIN";
+        const results = await chrome.scripting.executeScript(request);
+        if (results && results[0] && results[0].result) {
+          lastResult = results[0].result;
+          if (hasUsefulAccountInfo(lastResult)) return lastResult;
+        }
+      } catch (e) {
+        if (world === "ISOLATED") throw e;
+      }
+    }
+    await waitForAccountInfo(attempt < 2 ? 600 : 1000);
+  }
+  return lastResult;
+}
+
 async function initAccountLibForCurrentPage(tab, cfg) {
   AL_STATE.cfg = cfg;
   AL_STATE.tabId = tab.id;
@@ -1904,13 +2111,7 @@ async function initAccountLibForCurrentPage(tab, cfg) {
   // 2. 抓账号主页字段（executeScript 注入）
   let scraped = null;
   try {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: extractAccountInfoFromPage,
-    });
-    if (results && results[0] && results[0].result) {
-      scraped = results[0].result;
-    }
+    scraped = await scrapeAccountInfoFromTab(tab.id);
   } catch (e) {
     console.warn("抓页面失败：", e);
   }

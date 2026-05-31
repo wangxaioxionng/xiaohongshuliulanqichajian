@@ -434,6 +434,52 @@ class LarkWriter:
                 failed.append({"index": idx, "error": str(e)[:200]})
         return {"ok": ok, "failed": failed}
 
+    def upload_profile_collect_images_to_cells(
+        self,
+        spreadsheet_token: str,
+        sheet_id: str,
+        row_index: int,
+        image_bytes_list: list,
+        image_cols: int = 1,
+    ) -> dict:
+        """账号全采集表：第 1 张写 I 列封面，同时图片 1..N 写 K/L/M...。"""
+        if not image_bytes_list:
+            return {"ok": 0, "failed": []}
+
+        max_images = max(1, int(image_cols or 1))
+        images = list(image_bytes_list or [])[:max_images]
+        ok = 0
+        failed = []
+
+        def upload_one(col: str, image_bytes: bytes, name: str, index: int):
+            nonlocal ok
+            try:
+                self.upload_image_to_cell(
+                    spreadsheet_token, sheet_id, row_index, image_bytes,
+                    name,
+                    col=col,
+                )
+                ok += 1
+            except Exception as e:
+                failed.append({
+                    "index": index,
+                    "col": col,
+                    "error": str(e)[:200],
+                })
+
+        upload_one("I", images[0], f"profile_cover_{row_index}.jpg", 1)
+        image_start_col = len(PROFILE_COLLECT_BASE_HEADERS) + 1
+        for idx, image_bytes in enumerate(images, start=1):
+            target_col = col_letter(image_start_col + idx - 1)
+            upload_one(
+                target_col,
+                image_bytes,
+                f"profile_image_{idx}_{row_index}.jpg",
+                idx,
+            )
+
+        return {"ok": ok, "failed": failed}
+
     # ---------- Sheet 管理（v3.1 新增）----------
 
     def create_sheet(self, spreadsheet_token: str, title: str,
@@ -1241,6 +1287,7 @@ class LarkWriter:
             spreadsheet_token, sheet_id,
         )
         rows = []
+        written_records = []
         skipped = 0
         seq = max_seq
         for record in records:
@@ -1254,6 +1301,7 @@ class LarkWriter:
                     seq, record, source=source, image_cols=image_cols,
                 )
             )
+            written_records.append(record)
             if post_url:
                 existing_urls.add(post_url)
 
@@ -1271,12 +1319,36 @@ class LarkWriter:
             f"A{next_row}:{last_col}{end_row}",
             rows,
         )
+        image_ok = 0
+        image_failed = []
+        for offset, record in enumerate(written_records):
+            images = list(record.get("image_bytes_list") or [])
+            if not images:
+                continue
+            row_index = next_row + offset
+            try:
+                img_res = self.upload_profile_collect_images_to_cells(
+                    spreadsheet_token,
+                    sheet_id,
+                    row_index,
+                    images,
+                    image_cols=image_cols,
+                )
+                image_ok += int(img_res.get("ok") or 0)
+                image_failed.extend(img_res.get("failed") or [])
+            except Exception as e:
+                image_failed.append({
+                    "row": row_index,
+                    "error": str(e)[:200],
+                })
         self.invalidate_cache(spreadsheet_token)
         return {
             "written": len(rows),
             "skipped": skipped,
             "start_row": next_row,
             "end_row": end_row,
+            "image_uploaded": image_ok,
+            "image_failed": image_failed,
         }
 
     # ---------- 仪表盘 / 历史（v3.1 新增）----------

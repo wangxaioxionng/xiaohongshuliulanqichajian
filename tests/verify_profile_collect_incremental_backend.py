@@ -49,6 +49,7 @@ def main() -> None:
     fake_writer = FakeWriter()
     app.writer = fake_writer
     app.PROFILE_COLLECT_REQUEST_DELAY = 0
+    app.PROFILE_COLLECT_EMBED_IMAGES = False
 
     def fake_fetch(note_url: str) -> dict:
         if "bad" in note_url:

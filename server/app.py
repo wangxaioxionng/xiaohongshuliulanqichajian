@@ -132,13 +132,34 @@ PROFILE_COLLECT_REQUEST_DELAY = float(CONFIG.get("profile_collect_delay", 1.0))
 PROFILE_COLLECT_MAX_IMAGE_COLS = int(
     CONFIG.get("profile_collect_max_image_cols", 20)
 )
+PROFILE_COLLECT_EMBED_IMAGES = bool(
+    CONFIG.get("profile_collect_embed_images", True)
+)
 PROFILE_COLLECT_TASKS = {}
 PROFILE_COLLECT_TASKS_LOCK = threading.Lock()
 
-def _download_image(url: str) -> Optional[bytes]:
+def _image_request_headers(headers: Optional[dict] = None) -> dict:
+    """Build headers that can pass XHS image anti-hotlink checks."""
+    safe = {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://www.xiaohongshu.com/",
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    }
+    if isinstance(headers, dict):
+        for key in ("User-Agent", "Referer", "Accept", "Accept-Language"):
+            value = headers.get(key) or headers.get(key.lower())
+            if value:
+                safe[key] = str(value)
+    return safe
+
+
+def _download_image(url: str, headers: Optional[dict] = None) -> Optional[bytes]:
     try:
-        r = requests.get(url, timeout=15,
-                         headers={"User-Agent": "Mozilla/5.0"})
+        r = requests.get(
+            url,
+            timeout=15,
+            headers=_image_request_headers(headers),
+        )
         if r.status_code == 200 and len(r.content) > 1024:
             return r.content
     except Exception:
@@ -146,15 +167,30 @@ def _download_image(url: str) -> Optional[bytes]:
     return None
 
 
-def _download_images(urls: list) -> list:
+def _media_source_url(source) -> str:
+    if isinstance(source, dict):
+        return (source.get("url") or "").strip()
+    return str(source or "").strip()
+
+
+def _media_source_headers(source) -> dict:
+    if isinstance(source, dict) and isinstance(source.get("headers"), dict):
+        return source["headers"]
+    return {}
+
+
+def _download_images(sources: list, limit: Optional[int] = None) -> list:
     """按顺序下载图片，失败的跳过。"""
     images = []
     seen = set()
-    for url in urls or []:
+    for source in sources or []:
+        if limit and len(images) >= limit:
+            break
+        url = _media_source_url(source)
         if not url or url in seen:
             continue
         seen.add(url)
-        img = _download_image(url)
+        img = _download_image(url, _media_source_headers(source))
         if img:
             images.append(img)
     return images
@@ -169,13 +205,23 @@ def _sheet_saves_all_images(spreadsheet_token: str, sheet_id: str) -> bool:
 def _prepare_images(data: dict, save_all_images: bool) -> tuple:
     """返回 (cover_bytes, all_image_bytes)。all_image_bytes 仅爆款图使用。"""
     if save_all_images:
-        urls = data.get("image_urls") or []
-        if not urls and data.get("cover_url"):
-            urls = [data["cover_url"]]
-        images = _download_images(urls)
+        sources = data.get("image_items") or data.get("image_urls") or []
+        if not sources and data.get("cover_url"):
+            sources = [data["cover_url"]]
+        images = _download_images(sources)
         cover = images[0] if images else None
         return cover, images
-    cover = _download_image(data.get("cover_url")) if data.get("cover_url") else None
+    cover = None
+    cover_source = None
+    if data.get("image_items"):
+        cover_source = data["image_items"][0]
+    elif data.get("cover_url"):
+        cover_source = data["cover_url"]
+    if cover_source:
+        cover = _download_image(
+            _media_source_url(cover_source),
+            _media_source_headers(cover_source),
+        )
     return cover, None
 
 
@@ -291,8 +337,8 @@ def _pick_profile_title(text: str, fallback: str) -> str:
     return title[:80]
 
 
-def _profile_media_urls(medias: list) -> list:
-    urls = []
+def _profile_media_items(medias: list) -> list:
+    items = []
     seen = set()
     for media in medias or []:
         if not isinstance(media, dict):
@@ -307,8 +353,35 @@ def _profile_media_urls(medias: list) -> list:
             if not url or url in seen:
                 continue
             seen.add(url)
-            urls.append(url)
-    return urls
+            items.append({
+                "url": url,
+                "headers": media.get("headers") if isinstance(media.get("headers"), dict) else {},
+            })
+    return items
+
+
+def _profile_media_urls(medias: list) -> list:
+    return [item["url"] for item in _profile_media_items(medias)]
+
+
+def _attach_profile_image_bytes(records: list, image_cols: int) -> dict:
+    """Download images for profile collect rows before embedding into Feishu."""
+    if not PROFILE_COLLECT_EMBED_IMAGES:
+        return {"downloaded": 0, "records": 0}
+    downloaded = 0
+    records_with_images = 0
+    max_images = max(1, int(image_cols or 1))
+    for record in records or []:
+        sources = record.get("image_items") or [
+            {"url": url, "headers": {}}
+            for url in (record.get("image_urls") or [])
+        ]
+        images = _download_images(sources, limit=max_images)
+        if images:
+            record["image_bytes_list"] = images
+            downloaded += len(images)
+            records_with_images += 1
+    return {"downloaded": downloaded, "records": records_with_images}
 
 
 def _fetch_profile_posts(profile_url: str, max_items: int) -> tuple:
@@ -385,7 +458,8 @@ def _profile_posts_to_records(posts: list, profile_url: str,
     for post in posts:
         text = post.get("text") or post.get("desc") or post.get("caption") or ""
         post_url = post.get("post_url") or post.get("url") or ""
-        image_urls = _profile_media_urls(post.get("medias") or [])
+        image_items = _profile_media_items(post.get("medias") or [])
+        image_urls = [item["url"] for item in image_items]
         records.append({
             "account_name": account_name,
             "profile_url": profile_url,
@@ -394,6 +468,7 @@ def _profile_posts_to_records(posts: list, profile_url: str,
             "post_url": post_url,
             "created_at": _format_profile_created_at(post.get("created_at", "")),
             "image_urls": image_urls,
+            "image_items": image_items,
         })
     return records
 
@@ -430,7 +505,8 @@ def _note_response_to_record(data: dict, note_url: str, profile_url: str,
                              account_name: str) -> dict:
     text = data.get("text") or data.get("desc") or data.get("caption") or ""
     note_id = data.get("id") or _xhs_note_id(note_url)
-    image_urls = _profile_media_urls(data.get("medias") or [])
+    image_items = _profile_media_items(data.get("medias") or [])
+    image_urls = [item["url"] for item in image_items]
     return {
         "account_name": account_name,
         "profile_url": profile_url,
@@ -439,6 +515,7 @@ def _note_response_to_record(data: dict, note_url: str, profile_url: str,
         "post_url": note_url,
         "created_at": _format_profile_created_at(data.get("created_at", "")),
         "image_urls": image_urls,
+        "image_items": image_items,
     }
 
 
@@ -479,12 +556,13 @@ def _append_profile_record_immediately(task_id: str, spreadsheet_token: str,
     _task_update(
         task_id,
         phase="feishu_write",
-        message=f"正在保存成功结果到「{sheet_info['title']}」",
+        message=f"正在下载图片并保存到「{sheet_info['title']}」",
         sheet_title=sheet_info["title"],
         sheet_id=sheet_info["sheet_id"],
         sheet_url=sheet_url,
         created_sheet=sheet_info["created"],
     )
+    image_download = _attach_profile_image_bytes([record], image_cols)
     result = writer.append_profile_collect_records(
         spreadsheet_token,
         sheet_info["sheet_id"],
@@ -492,6 +570,7 @@ def _append_profile_record_immediately(task_id: str, spreadsheet_token: str,
         source=source,
         image_cols=image_cols,
     )
+    result["image_downloaded"] = image_download.get("downloaded", 0)
     return sheet_info, result, sheet_url
 
 
@@ -517,12 +596,13 @@ def _append_profile_records(task_id: str, spreadsheet_token: str,
     _task_update(
         task_id,
         phase="feishu_write",
-        message=f"正在保存结果到「{sheet_info['title']}」",
+        message=f"正在下载图片并保存到「{sheet_info['title']}」",
         sheet_title=sheet_info["title"],
         sheet_id=sheet_info["sheet_id"],
         sheet_url=sheet_url,
         created_sheet=sheet_info["created"],
     )
+    image_download = _attach_profile_image_bytes(records, image_cols)
     result = writer.append_profile_collect_records(
         spreadsheet_token,
         sheet_info["sheet_id"],
@@ -530,6 +610,7 @@ def _append_profile_records(task_id: str, spreadsheet_token: str,
         source=source,
         image_cols=image_cols,
     )
+    result["image_downloaded"] = image_download.get("downloaded", 0)
     return sheet_info, result, sheet_url
 
 

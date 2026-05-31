@@ -40,6 +40,10 @@ const cases = [
     text: "笔记 48 粉丝 2.3万 获赞与收藏 11.8万",
     expected: {{ notes_count: "48", fans_count: "2.3万", likes_count: "11.8万" }},
   }},
+  {{
+    text: "55 关注 208 粉丝 2148 获赞与收藏 笔记・33 专辑・0",
+    expected: {{ follow_count: "55", fans_count: "208", likes_count: "2148", notes_count: "33" }},
+  }},
 ];
 for (const item of cases) {{
   const got = parseProfileStatsFromText(item.text);
@@ -55,6 +59,7 @@ console.log(JSON.stringify(cases.map((item) => parseProfileStatsFromText(item.te
         ["node", "-e", js],
         cwd=ROOT,
         text=True,
+        encoding="utf-8",
         capture_output=True,
     )
     if result.returncode != 0:
