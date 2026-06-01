@@ -23,6 +23,8 @@ def main() -> None:
         def __init__(self):
             self.rows = []
             self.created = False
+            self.failure_rows_written = 0
+            self.overwritten_rows = 0
 
         def ensure_profile_collect_sheet(self, spreadsheet_token, account_name,
                                          image_cols=1):
@@ -37,8 +39,16 @@ def main() -> None:
         def append_profile_collect_records(self, spreadsheet_token, sheet_id,
                                            records, source="账号全采集",
                                            image_cols=1):
-            self.rows.extend(records)
-            start_row = len(self.rows) + 1
+            start_row = len(self.rows) + 2
+            for record in records:
+                self.rows.append({
+                    "row": len(self.rows) + 2,
+                    "seq": len(self.rows) + 1,
+                    "status": "✅ 已采集",
+                    "url": record["post_url"],
+                    "title": record["title"],
+                    "error": "",
+                })
             return {
                 "written": len(records),
                 "skipped": 0,
@@ -52,12 +62,14 @@ def main() -> None:
             row = len(self.rows) + 2
             seq = len(self.rows) + 1
             self.rows.append({
-                "status": "❌ 失败",
                 "row": row,
                 "seq": seq,
+                "status": "❌ 失败",
                 "url": failure["url"],
+                "title": "",
                 "error": failure["error"],
             })
+            self.failure_rows_written += 1
             return {"written": 1, "row": row, "seq": seq}
 
         def overwrite_profile_collect_record(self, spreadsheet_token, sheet_id,
@@ -65,13 +77,15 @@ def main() -> None:
                                              source="账号全采集",
                                              image_cols=1):
             for row in self.rows:
-                if row.get("row") == row_idx:
+                if row["row"] == row_idx:
                     row.update({
-                        "status": "✅ 已采集",
                         "seq": seq,
+                        "status": "✅ 已采集",
                         "url": record["post_url"],
+                        "title": record["title"],
                         "error": "",
                     })
+                    self.overwritten_rows += 1
                     return {"written": 1, "row": row_idx}
             raise AssertionError(f"row {row_idx} not found")
 
@@ -81,11 +95,12 @@ def main() -> None:
                                               source="账号全采集",
                                               image_cols=1):
             for row in self.rows:
-                if row.get("row") == row_idx:
+                if row["row"] == row_idx:
                     row.update({
-                        "status": "❌ 失败",
                         "seq": seq,
+                        "status": "❌ 失败",
                         "url": failure["url"],
+                        "title": "",
                         "error": failure["error"],
                     })
                     return {"written": 1, "row": row_idx}
@@ -94,17 +109,20 @@ def main() -> None:
     fake_writer = FakeWriter()
     app.writer = fake_writer
     app.PROFILE_COLLECT_REQUEST_DELAY = 0
-    app.PROFILE_COLLECT_POST_RETRY_ATTEMPTS = 3
+    app.PROFILE_COLLECT_POST_RETRY_ATTEMPTS = 1
     app.PROFILE_COLLECT_POST_RETRY_DELAY = 0
     app.PROFILE_COLLECT_POST_RETRY_JITTER = 0
     app.PROFILE_COLLECT_EMBED_IMAGES = False
 
+    calls = {}
+
     def fake_fetch(note_url: str) -> dict:
-        if "bad" in note_url:
-            raise RuntimeError("fake api failed")
+        calls[note_url] = calls.get(note_url, 0) + 1
+        if "late-success" in note_url and calls[note_url] == 1:
+            raise RuntimeError("temporary api failure")
         return {
             "id": note_url.rsplit("/", 1)[-1],
-            "title": "测试标题",
+            "title": f"标题-{note_url.rsplit('/', 1)[-1]}",
             "text": "测试文案 #测试#",
             "medias": [
                 {
@@ -115,7 +133,7 @@ def main() -> None:
         }
 
     app._fetch_note_post = fake_fetch
-    task_id = "incremental-test"
+    task_id = "failure-backfill-test"
     with app.PROFILE_COLLECT_TASKS_LOCK:
         app.PROFILE_COLLECT_TASKS[task_id] = {
             "task_id": task_id,
@@ -129,34 +147,39 @@ def main() -> None:
             "partial_saved": 0,
         }
 
+    late_url = "https://www.xiaohongshu.com/explore/late-success"
     app._run_profile_collect_task(
         task_id,
         "fake_token",
         "https://www.xiaohongshu.com/user/profile/user1",
         "测试账号",
         [
-            "https://www.xiaohongshu.com/explore/good1",
-            "https://www.xiaohongshu.com/explore/bad",
-            "https://www.xiaohongshu.com/explore/good2",
+            "https://www.xiaohongshu.com/explore/good",
+            late_url,
         ],
         "账号全采集",
     )
+
     task = app._task_snapshot(task_id)
+    assert calls[late_url] == 2
     assert task["status"] == "done"
-    assert task["processed"] == 3
+    assert task["phase"] == "done"
+    assert task["processed"] == 2
     assert task["success"] == 2
-    assert task["failed"] == 1
+    assert task["failed"] == 0
     assert task["written"] == 2
-    assert task["partial_saved"] == 3
     assert task["failed_saved"] == 1
     assert task["retry_total"] == 1
     assert task["retry_processed"] == 1
-    assert task["retry_success"] == 0
-    assert task["retry_failed"] == 1
-    assert len(task["failed_examples"]) == 1
-    assert len(task["failed_details"]) == 1
-    assert "补采仍失败" in task["failed_details"][0]["error"]
-    assert len(fake_writer.rows) == 3
+    assert task["retry_success"] == 1
+    assert task["retry_failed"] == 0
+    assert task["partial_saved"] == 2
+    assert fake_writer.failure_rows_written == 1
+    assert fake_writer.overwritten_rows == 1
+    assert len(fake_writer.rows) == 2
+    assert [row["status"] for row in fake_writer.rows] == ["✅ 已采集", "✅ 已采集"]
+    assert fake_writer.rows[1]["url"] == late_url
+    assert fake_writer.rows[1]["title"] == "标题-late-success"
 
 
 if __name__ == "__main__":

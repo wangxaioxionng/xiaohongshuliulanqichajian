@@ -1851,6 +1851,7 @@ function profilePhaseText(state) {
   if (phase === "api_extract") return "第 3 步：服务器逐篇调用单篇 API";
   if (phase === "feishu_prepare") return "第 4 步：创建或检查飞书表";
   if (phase === "feishu_write") return "第 5 步：写入飞书表";
+  if (phase === "retry_failed_rows") return "第 6 步：补采失败笔记";
   if (phase === "done") return "完成：已写入飞书";
   if (phase === "failed") return "采集失败";
   return "账号全采集中";
@@ -1867,6 +1868,11 @@ function renderProfileCollectState(state) {
   const failed = Number(state.failed || state.backend_task?.failed || 0);
   const written = Number(state.written || state.backend_task?.written || 0);
   const skipped = Number(state.skipped || state.backend_task?.skipped || 0);
+  const failedSaved = Number(state.failed_saved || state.backend_task?.failed_saved || 0);
+  const retryTotal = Number(state.retry_total || state.backend_task?.retry_total || 0);
+  const retryProcessed = Number(state.retry_processed || state.backend_task?.retry_processed || 0);
+  const retrySuccess = Number(state.retry_success || state.backend_task?.retry_success || 0);
+  const retryFailed = Number(state.retry_failed || state.backend_task?.retry_failed || 0);
   const checkpointSaved = Number(state.checkpoint_saved || state.link_result?.checkpoint_saved || 0);
   const partialSaved = Number(state.partial_saved || state.backend_task?.partial_saved || 0);
   const apiReadyCount = Number(state.api_ready_count || state.link_result?.api_ready_count || 0);
@@ -1880,6 +1886,7 @@ function renderProfileCollectState(state) {
   else if (phase === "api_extract") percent = 42 + (processed / Math.max(1, total)) * 38;
   else if (phase === "feishu_prepare") percent = 84;
   else if (phase === "feishu_write") percent = 92;
+  else if (phase === "retry_failed_rows") percent = 84 + (retryProcessed / Math.max(1, retryTotal || 1)) * 12;
   else if (status === "done") percent = 100;
 
   if (status === "failed") {
@@ -1901,15 +1908,19 @@ function renderProfileCollectState(state) {
     const doneDetail = collectMode === "single_post"
       ? `完整链接 ${apiReadyCount || success} 条；API 成功 ${success} 条，失败 ${failed} 条。`
       : `主页接口返回 ${total || success} 条；API 成功 ${success} 条，失败 ${failed} 条。`;
+    const retryDetail = failedSaved
+      ? `<div class="profile-step">失败已落表 ${failedSaved} 条，补采成功 ${retrySuccess} 条，仍失败 ${retryFailed || failed} 条。</div>`
+      : "";
     const openButton = state.sheet_url
       ? `<button id="profile-open-sheet-direct" class="btn-mini" style="width:auto;height:28px;margin-top:8px;padding:0 10px;font-size:12px">打开飞书表</button>`
       : `<button id="profile-open-sheet" class="btn-mini" style="width:auto;height:28px;margin-top:8px;padding:0 10px;font-size:12px">打开飞书表</button>`;
     showProfileCollectStatus(
       "success",
-      `<div><b>完成：已写入「${escapeHTML(sheetTitle)}」</b></div>
-       <div class="profile-step">${escapeHTML(doneDetail)}</div>
-       <div class="profile-step">新增 ${written} 条，跳过重复 ${skipped} 条。</div>
-	       ${profileProgressBar(100)}
+	      `<div><b>完成：已写入「${escapeHTML(sheetTitle)}」</b></div>
+	       <div class="profile-step">${escapeHTML(doneDetail)}</div>
+	       <div class="profile-step">新增 ${written} 条，跳过重复 ${skipped} 条。</div>
+	       ${retryDetail}
+		       ${profileProgressBar(100)}
 	       ${renderProfileFailures(state.failed_examples || state.backend_task?.failed_examples)}
 	       ${openButton}`,
     );
@@ -1922,9 +1933,11 @@ function renderProfileCollectState(state) {
 
   const linkDetail = phase === "link_scan"
     ? `已找到 ${found}/${totalLimit} 条链接，完整链接 ${apiReadyCount} 条，短链接 ${incompleteLinkCount} 条；已保存 ${checkpointSaved} 条；已滚动 ${state.scroll_rounds || 0} 次；长暂停 ${state.long_pauses || 0} 次`
-    : (collectMode === "single_post"
+    : (phase === "retry_failed_rows"
+      ? `正在补采失败笔记：已处理 ${retryProcessed}/${retryTotal || failedSaved}，补采成功 ${retrySuccess}，仍失败 ${failed}`
+      : (collectMode === "single_post"
       ? `完整链接 ${apiReadyCount || total} 条；已处理 ${processed}/${total || totalLimit}，成功 ${success}，失败 ${failed}，已落表 ${partialSaved || written} 条`
-      : `主页接口目标 ${total || totalLimit} 条；已处理 ${processed}/${total || totalLimit}，成功 ${success}，失败 ${failed}，已落表 ${partialSaved || written} 条`);
+      : `主页接口目标 ${total || totalLimit} 条；已处理 ${processed}/${total || totalLimit}，成功 ${success}，失败 ${failed}，已落表 ${partialSaved || written} 条`));
   const note = phase === "link_scan"
     ? "这一段在页面里慢速滚动，弹窗关闭后仍会继续。"
     : (state.message || "后台任务运行中，关闭弹窗后可重新打开查看进度。");
@@ -1957,6 +1970,11 @@ function backendTaskToProfileState(state, task) {
     incomplete_link_count: state?.incomplete_link_count || state?.link_result?.incomplete_link_count || 0,
     failed_examples: task.failed_examples || [],
     failed_details: task.failed_details || task.failed_examples || [],
+    failed_saved: task.failed_saved || 0,
+    retry_total: task.retry_total || 0,
+    retry_processed: task.retry_processed || 0,
+    retry_success: task.retry_success || 0,
+    retry_failed: task.retry_failed || 0,
     sheet_title: task.sheet_title || state?.sheet_title || "",
     sheet_id: task.sheet_id || state?.sheet_id || "",
     sheet_url: task.sheet_url || state?.sheet_url || "",

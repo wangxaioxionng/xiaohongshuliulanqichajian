@@ -77,7 +77,7 @@ writer = LarkWriter(
 )
 
 # ---------- FastAPI ----------
-app = FastAPI(title="xhs-collect API", version="4.7.2")
+app = FastAPI(title="xhs-collect API", version="4.7.3")
 
 # CORS：v4 加 Authorization header（JWT 用）
 app.add_middleware(
@@ -675,11 +675,16 @@ def _run_profile_collect_task(task_id: str, spreadsheet_token: str,
                               profile_url: str, account_name: str,
                               note_urls: list, source: str) -> None:
     failures = []
+    failure_rows = []
     sheet_info = None
     sheet_url = ""
     success_count = 0
     written_total = 0
     skipped_total = 0
+    failed_saved = 0
+    retry_processed = 0
+    retry_success = 0
+    retry_failed = 0
     total = len(note_urls)
     print(f"[profile_collect] task={task_id} start total={total} account={account_name}")
     _task_update(
@@ -721,6 +726,11 @@ def _run_profile_collect_task(task_id: str, spreadsheet_token: str,
             written=written_total,
             skipped=skipped_total,
             partial_saved=written_total + skipped_total,
+            failed_saved=failed_saved,
+            retry_total=0,
+            retry_processed=0,
+            retry_success=0,
+            retry_failed=0,
             phase="api_extract",
             message=f"正在调用 API：{idx}/{total}，已保存 {written_total + skipped_total} 条",
         )
@@ -728,12 +738,144 @@ def _run_profile_collect_task(task_id: str, spreadsheet_token: str,
             time.sleep(PROFILE_COLLECT_REQUEST_DELAY)
 
     try:
-        if success_count and sheet_info:
+        image_cols = max(1, PROFILE_COLLECT_MAX_IMAGE_COLS)
+        if failures:
+            if not sheet_info:
+                _task_update(
+                    task_id,
+                    phase="feishu_prepare",
+                    message="没有 API 成功结果，正在创建飞书表保存失败链接",
+                )
+                sheet_info = writer.ensure_profile_collect_sheet(
+                    spreadsheet_token, account_name, image_cols=image_cols,
+                )
+                sheet_url = (
+                    f"https://my.feishu.cn/sheets/{spreadsheet_token}"
+                    f"?sheet={sheet_info['sheet_id']}"
+                )
+            _task_update(
+                task_id,
+                phase="feishu_write",
+                message=f"正在把 {len(failures)} 条失败链接保存到「{sheet_info['title']}」",
+                sheet_title=sheet_info["title"],
+                sheet_id=sheet_info["sheet_id"],
+                sheet_url=sheet_url,
+                created_sheet=sheet_info["created"],
+            )
+            for failure in failures:
+                result = writer.append_profile_collect_failure(
+                    spreadsheet_token,
+                    sheet_info["sheet_id"],
+                    failure,
+                    account_name,
+                    profile_url,
+                    source=source,
+                    image_cols=image_cols,
+                )
+                saved_failure = dict(failure)
+                saved_failure["row"] = result["row"]
+                saved_failure["seq"] = result["seq"]
+                failure_rows.append(saved_failure)
+                failed_saved += int(result.get("written") or 0)
+            _task_update(
+                task_id,
+                failed_saved=failed_saved,
+                partial_saved=written_total + skipped_total + len(failure_rows),
+                failed=len(failure_rows),
+                failed_examples=failure_rows[:20],
+                failed_details=failure_rows,
+                message=f"失败链接已落表 {failed_saved} 条，准备自动补采",
+            )
+
+        remaining_failures = list(failure_rows)
+        if failure_rows:
+            retry_total = len(failure_rows)
+            _task_update(
+                task_id,
+                phase="retry_failed_rows",
+                retry_total=retry_total,
+                retry_processed=0,
+                retry_success=0,
+                retry_failed=0,
+                message=f"正在自动补采失败笔记：0/{retry_total}",
+            )
+            remaining_failures = []
+            for failure in failure_rows:
+                retry_processed += 1
+                try:
+                    data = _fetch_note_post_with_retry(failure["url"])
+                    record = _note_response_to_record(
+                        data, failure["url"], profile_url, account_name,
+                    )
+                    image_download = _attach_profile_image_bytes(
+                        [record], image_cols,
+                    )
+                    result = writer.overwrite_profile_collect_record(
+                        spreadsheet_token,
+                        sheet_info["sheet_id"],
+                        failure["row"],
+                        failure["seq"],
+                        record,
+                        source=f"{source}-失败补采",
+                        image_cols=image_cols,
+                    )
+                    result["image_downloaded"] = image_download.get("downloaded", 0)
+                    success_count += 1
+                    retry_success += 1
+                    written_total += int(result.get("written") or 0)
+                except Exception as e:
+                    retry_failed += 1
+                    updated_failure = dict(failure)
+                    updated_failure["error"] = f"补采仍失败：{str(e)[:180]}"
+                    writer.overwrite_profile_collect_failure(
+                        spreadsheet_token,
+                        sheet_info["sheet_id"],
+                        failure["row"],
+                        failure["seq"],
+                        updated_failure,
+                        account_name,
+                        profile_url,
+                        source=f"{source}-失败补采",
+                        image_cols=image_cols,
+                    )
+                    remaining_failures.append(updated_failure)
+
+                still_failed = retry_total - retry_success
+                _task_update(
+                    task_id,
+                    phase="retry_failed_rows",
+                    processed=total,
+                    success=success_count,
+                    failed=still_failed,
+                    written=written_total,
+                    skipped=skipped_total,
+                    partial_saved=written_total + skipped_total + still_failed,
+                    retry_total=retry_total,
+                    retry_processed=retry_processed,
+                    retry_success=retry_success,
+                    retry_failed=retry_failed,
+                    failed_examples=remaining_failures[:20],
+                    failed_details=remaining_failures,
+                    message=(
+                        f"正在自动补采失败笔记：{retry_processed}/{retry_total}，"
+                        f"补采成功 {retry_success} 条，仍失败 {still_failed} 条"
+                    ),
+                )
+                if (retry_processed < retry_total and
+                        PROFILE_COLLECT_REQUEST_DELAY > 0):
+                    time.sleep(PROFILE_COLLECT_REQUEST_DELAY)
+
+        final_failed = len(remaining_failures)
+        if sheet_info:
             _task_update(
                 task_id,
                 status="done",
                 phase="done",
-                message="已写入飞书表",
+                message=(
+                    "已写入飞书表"
+                    if final_failed == 0 else
+                    f"已写入飞书表，仍有 {final_failed} 条失败链接已保留"
+                ),
                 sheet_title=sheet_info["title"],
                 sheet_id=sheet_info["sheet_id"],
                 sheet_url=sheet_url,
@@ -741,14 +883,23 @@ def _run_profile_collect_task(task_id: str, spreadsheet_token: str,
                 fetched=success_count,
                 written=written_total,
                 skipped=skipped_total,
-                partial_saved=written_total + skipped_total,
+                failed=final_failed,
+                failed_examples=remaining_failures[:20],
+                failed_details=remaining_failures,
+                failed_saved=failed_saved,
+                retry_total=len(failure_rows),
+                retry_processed=retry_processed,
+                retry_success=retry_success,
+                retry_failed=retry_failed,
+                partial_saved=written_total + skipped_total + final_failed,
                 image_columns=PROFILE_COLLECT_MAX_IMAGE_COLS,
                 finished_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
             print(
                 f"[profile_collect] task={task_id} done "
-                f"success={success_count} failed={len(failures)} "
-                f"written={written_total} skipped={skipped_total}"
+                f"success={success_count} failed={final_failed} "
+                f"written={written_total} skipped={skipped_total} "
+                f"failed_saved={failed_saved} retry_success={retry_success}"
             )
         else:
             _task_update(
@@ -1312,6 +1463,12 @@ def profile_collect(req: ProfileCollectRequest,
             "success": 0,
             "failed": 0,
             "failed_examples": [],
+            "failed_details": [],
+            "failed_saved": 0,
+            "retry_total": 0,
+            "retry_processed": 0,
+            "retry_success": 0,
+            "retry_failed": 0,
             "written": 0,
             "skipped": 0,
             "partial_saved": 0,

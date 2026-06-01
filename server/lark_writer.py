@@ -1275,6 +1275,126 @@ class LarkWriter:
         ])
         return row
 
+    def build_profile_collect_failure_row(self, seq: int, failure: dict,
+                                          account_name: str,
+                                          profile_url: str, source: str,
+                                          image_cols: int) -> list:
+        post_url = (failure.get("url") or "").strip()
+        error = (failure.get("error") or "").strip()
+        row = [
+            seq,
+            account_name,
+            self._url_cell(profile_url, "主页"),
+            "采集失败",
+            f"失败原因：{error[:300]}",
+            "",
+            self._url_cell(post_url, "打开笔记"),
+            0,
+            "",
+            "",
+        ]
+        for _ in range(image_cols):
+            row.append("")
+        row.extend([
+            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            source,
+            "❌ 失败",
+        ])
+        return row
+
+    def append_profile_collect_failure(self, spreadsheet_token: str,
+                                       sheet_id: str, failure: dict,
+                                       account_name: str,
+                                       profile_url: str,
+                                       source: str = "账号全采集",
+                                       image_cols: int = 1) -> dict:
+        next_row, max_seq = self._profile_collect_next_row(
+            spreadsheet_token, sheet_id,
+        )
+        seq = max_seq + 1
+        row = self.build_profile_collect_failure_row(
+            seq, failure, account_name, profile_url,
+            source=source, image_cols=image_cols,
+        )
+        last_col_index = (
+            len(PROFILE_COLLECT_BASE_HEADERS) + image_cols +
+            len(PROFILE_COLLECT_META_HEADERS)
+        )
+        last_col = col_letter(last_col_index)
+        self.write_range(
+            spreadsheet_token, sheet_id,
+            f"A{next_row}:{last_col}{next_row}",
+            [row],
+        )
+        self.invalidate_cache(spreadsheet_token)
+        return {"written": 1, "row": next_row, "seq": seq}
+
+    def overwrite_profile_collect_record(self, spreadsheet_token: str,
+                                         sheet_id: str, row_idx: int,
+                                         seq: int, record: dict,
+                                         source: str = "账号全采集",
+                                         image_cols: int = 1) -> dict:
+        row = self.build_profile_collect_row(
+            seq, record, source=source, image_cols=image_cols,
+        )
+        last_col_index = (
+            len(PROFILE_COLLECT_BASE_HEADERS) + image_cols +
+            len(PROFILE_COLLECT_META_HEADERS)
+        )
+        last_col = col_letter(last_col_index)
+        self.write_range(
+            spreadsheet_token, sheet_id,
+            f"A{row_idx}:{last_col}{row_idx}",
+            [row],
+        )
+        images = list(record.get("image_bytes_list") or [])
+        image_failed = []
+        image_ok = 0
+        if images:
+            try:
+                img_res = self.upload_profile_collect_images_to_cells(
+                    spreadsheet_token,
+                    sheet_id,
+                    row_idx,
+                    images,
+                    image_cols=image_cols,
+                )
+                image_ok = int(img_res.get("ok") or 0)
+                image_failed = img_res.get("failed") or []
+            except Exception as e:
+                image_failed.append({"row": row_idx, "error": str(e)[:200]})
+        self.invalidate_cache(spreadsheet_token)
+        return {
+            "written": 1,
+            "row": row_idx,
+            "image_uploaded": image_ok,
+            "image_failed": image_failed,
+        }
+
+    def overwrite_profile_collect_failure(self, spreadsheet_token: str,
+                                          sheet_id: str, row_idx: int,
+                                          seq: int, failure: dict,
+                                          account_name: str,
+                                          profile_url: str,
+                                          source: str = "账号全采集",
+                                          image_cols: int = 1) -> dict:
+        row = self.build_profile_collect_failure_row(
+            seq, failure, account_name, profile_url,
+            source=source, image_cols=image_cols,
+        )
+        last_col_index = (
+            len(PROFILE_COLLECT_BASE_HEADERS) + image_cols +
+            len(PROFILE_COLLECT_META_HEADERS)
+        )
+        last_col = col_letter(last_col_index)
+        self.write_range(
+            spreadsheet_token, sheet_id,
+            f"A{row_idx}:{last_col}{row_idx}",
+            [row],
+        )
+        self.invalidate_cache(spreadsheet_token)
+        return {"written": 1, "row": row_idx}
+
     def append_profile_collect_records(self, spreadsheet_token: str,
                                        sheet_id: str,
                                        records: list,
