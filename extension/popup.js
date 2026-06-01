@@ -1956,6 +1956,7 @@ function backendTaskToProfileState(state, task) {
     api_ready_count: state?.api_ready_count || state?.link_result?.api_ready_count || 0,
     incomplete_link_count: state?.incomplete_link_count || state?.link_result?.incomplete_link_count || 0,
     failed_examples: task.failed_examples || [],
+    failed_details: task.failed_details || task.failed_examples || [],
     sheet_title: task.sheet_title || state?.sheet_title || "",
     sheet_id: task.sheet_id || state?.sheet_id || "",
     sheet_url: task.sheet_url || state?.sheet_url || "",

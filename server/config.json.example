@@ -12,6 +12,9 @@
   "meowload_api_url": "https://api.meowload.net/openapi/extract/playlist",
   "meowload_post_api_url": "https://api.meowload.net/openapi/extract/post",
   "profile_collect_max_items": 400,
-  "profile_collect_delay": 1.0,
+  "profile_collect_delay": 2.5,
+  "profile_collect_post_retry_attempts": 3,
+  "profile_collect_post_retry_delay": 6.0,
+  "profile_collect_post_retry_jitter": 2.0,
   "profile_collect_max_image_cols": 20
 }

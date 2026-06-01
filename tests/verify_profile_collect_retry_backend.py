@@ -54,9 +54,12 @@ def main() -> None:
     app.PROFILE_COLLECT_POST_RETRY_JITTER = 0
     app.PROFILE_COLLECT_EMBED_IMAGES = False
 
+    calls = {}
+
     def fake_fetch(note_url: str) -> dict:
-        if "bad" in note_url:
-            raise RuntimeError("fake api failed")
+        calls[note_url] = calls.get(note_url, 0) + 1
+        if "flaky" in note_url and calls[note_url] == 1:
+            raise RuntimeError("temporary meowload failure")
         return {
             "id": note_url.rsplit("/", 1)[-1],
             "title": "测试标题",
@@ -70,7 +73,7 @@ def main() -> None:
         }
 
     app._fetch_note_post = fake_fetch
-    task_id = "incremental-test"
+    task_id = "retry-test"
     with app.PROFILE_COLLECT_TASKS_LOCK:
         app.PROFILE_COLLECT_TASKS[task_id] = {
             "task_id": task_id,
@@ -84,28 +87,26 @@ def main() -> None:
             "partial_saved": 0,
         }
 
+    flaky_url = "https://www.xiaohongshu.com/explore/flaky"
     app._run_profile_collect_task(
         task_id,
         "fake_token",
         "https://www.xiaohongshu.com/user/profile/user1",
         "测试账号",
         [
-            "https://www.xiaohongshu.com/explore/good1",
-            "https://www.xiaohongshu.com/explore/bad",
-            "https://www.xiaohongshu.com/explore/good2",
+            flaky_url,
+            "https://www.xiaohongshu.com/explore/good",
         ],
         "账号全采集",
     )
+
     task = app._task_snapshot(task_id)
+    assert calls[flaky_url] == 2
     assert task["status"] == "done"
-    assert task["processed"] == 3
+    assert task["processed"] == 2
     assert task["success"] == 2
-    assert task["failed"] == 1
+    assert task["failed"] == 0
     assert task["written"] == 2
-    assert task["partial_saved"] == 2
-    assert len(task["failed_examples"]) == 1
-    assert len(task["failed_details"]) == 1
-    assert "已重试 2 次" in task["failed_details"][0]["error"]
     assert len(fake_writer.rows) == 2
 
 

@@ -14,6 +14,7 @@ xhs-collect 后端 API（FastAPI，OAuth 多租户 v4.0）
 """
 import html
 import json
+import random
 import re
 import secrets as py_secrets
 import threading
@@ -76,7 +77,7 @@ writer = LarkWriter(
 )
 
 # ---------- FastAPI ----------
-app = FastAPI(title="xhs-collect API", version="4.7.1")
+app = FastAPI(title="xhs-collect API", version="4.7.2")
 
 # CORS：v4 加 Authorization header（JWT 用）
 app.add_middleware(
@@ -128,7 +129,16 @@ MEOWLOAD_POST_API_URL = CONFIG.get(
     "https://api.meowload.net/openapi/extract/post",
 )
 PROFILE_COLLECT_MAX_ITEMS = int(CONFIG.get("profile_collect_max_items", 400))
-PROFILE_COLLECT_REQUEST_DELAY = float(CONFIG.get("profile_collect_delay", 1.0))
+PROFILE_COLLECT_REQUEST_DELAY = float(CONFIG.get("profile_collect_delay", 2.5))
+PROFILE_COLLECT_POST_RETRY_ATTEMPTS = max(
+    1, int(CONFIG.get("profile_collect_post_retry_attempts", 3))
+)
+PROFILE_COLLECT_POST_RETRY_DELAY = float(
+    CONFIG.get("profile_collect_post_retry_delay", 6.0)
+)
+PROFILE_COLLECT_POST_RETRY_JITTER = float(
+    CONFIG.get("profile_collect_post_retry_jitter", 2.0)
+)
 PROFILE_COLLECT_MAX_IMAGE_COLS = int(
     CONFIG.get("profile_collect_max_image_cols", 20)
 )
@@ -501,6 +511,53 @@ def _fetch_note_post(note_url: str) -> dict:
     return data
 
 
+def _is_non_retryable_meowload_error(error: Exception) -> bool:
+    text = str(error)
+    non_retryable_markers = (
+        "API Key",
+        "api key",
+        "认证",
+        "鉴权",
+        "Authentication",
+        "401",
+        "余额",
+        "次数",
+        "Credits",
+        "quota",
+        "402",
+        "参数",
+        "422",
+    )
+    return any(marker in text for marker in non_retryable_markers)
+
+
+def _fetch_note_post_with_retry(note_url: str) -> dict:
+    attempts = max(1, int(PROFILE_COLLECT_POST_RETRY_ATTEMPTS or 1))
+    errors = []
+    for attempt in range(1, attempts + 1):
+        try:
+            return _fetch_note_post(note_url)
+        except Exception as e:
+            errors.append(str(e)[:200])
+            if attempt >= attempts or _is_non_retryable_meowload_error(e):
+                break
+            wait = max(0.0, PROFILE_COLLECT_POST_RETRY_DELAY * attempt)
+            if PROFILE_COLLECT_POST_RETRY_JITTER > 0:
+                wait += random.uniform(0, PROFILE_COLLECT_POST_RETRY_JITTER)
+            print(
+                "[profile_collect] post_api_retry "
+                f"attempt={attempt + 1}/{attempts} wait={wait:.1f}s "
+                f"error={str(e)[:120]}"
+            )
+            if wait > 0:
+                time.sleep(wait)
+
+    message = errors[-1] if errors else "未知错误"
+    if len(errors) > 1:
+        message = f"{message}（已重试 {len(errors) - 1} 次）"
+    raise RuntimeError(message)
+
+
 def _note_response_to_record(data: dict, note_url: str, profile_url: str,
                              account_name: str) -> dict:
     text = data.get("text") or data.get("desc") or data.get("caption") or ""
@@ -629,12 +686,12 @@ def _run_profile_collect_task(task_id: str, spreadsheet_token: str,
         task_id,
         status="running",
         phase="api_extract",
-        message="服务器已开始逐篇调用 API",
+        message="服务器已开始逐篇调用 API，失败会自动重试",
         total=total,
     )
     for idx, note_url in enumerate(note_urls, start=1):
         try:
-            data = _fetch_note_post(note_url)
+            data = _fetch_note_post_with_retry(note_url)
             record = _note_response_to_record(
                 data, note_url, profile_url, account_name,
             )
@@ -659,7 +716,8 @@ def _run_profile_collect_task(task_id: str, spreadsheet_token: str,
             processed=idx,
             success=success_count,
             failed=len(failures),
-            failed_examples=failures[:5],
+            failed_examples=failures[:20],
+            failed_details=failures,
             written=written_total,
             skipped=skipped_total,
             partial_saved=written_total + skipped_total,

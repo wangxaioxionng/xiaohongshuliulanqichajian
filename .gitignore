@@ -4,6 +4,8 @@ server/config.json
 extension/secrets.js
 server/data.db
 **/*.db
+**/*.db-wal
+**/*.db-shm
 **/.env
 **/*.secret
 **/credentials.json

@@ -17,6 +17,7 @@ CHECKS = [
     ("主页采集进度展示", ["python3", "tests/verify_profile_collect_visibility.py"]),
     ("主页采集断点续采", ["python3", "tests/verify_profile_collect_checkpoint.py"]),
     ("主页采集增量后端", ["python3", "tests/verify_profile_collect_incremental_backend.py"]),
+    ("主页采集临时失败重试", ["python3", "tests/verify_profile_collect_retry_backend.py"]),
     ("主页采集路由模式", ["python3", "tests/verify_profile_collect_route_mode.py"]),
     ("主页批量接口后端", ["python3", "tests/verify_profile_collect_playlist_backend.py"]),
     ("主页采集图片嵌入", ["python3", "tests/verify_profile_collect_image_embedding.py"]),
