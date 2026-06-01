@@ -290,6 +290,104 @@
       padding: 10px 12px;
     }
     .btn-secondary:hover { background: var(--gray-200); }
+    .module-section {
+      margin-bottom: 12px;
+      padding: 11px;
+      border: 1px solid var(--gray-200);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .module-note {
+      border-color: #FECACA;
+      background: #FFFBFB;
+    }
+    .module-shop {
+      border-color: #BAE6FD;
+      background: #F7FCFF;
+    }
+    .module-comments {
+      border-color: #BBF7D0;
+      background: #F8FFF9;
+    }
+    .module-settings {
+      border-color: #E4E4E7;
+      background: #FAFAFA;
+    }
+    .feature-tabs {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0;
+      margin-bottom: 12px;
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .feature-tab {
+      position: relative;
+      height: 42px;
+      border: 0;
+      border-right: 1px solid var(--gray-200);
+      background: #fff;
+      color: var(--gray-700);
+      font-size: 13px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .feature-tab:last-child { border-right: 0; }
+    .feature-tab.active {
+      color: var(--brand);
+      background: #FFF7F8;
+    }
+    .feature-tab.active::after {
+      content: "";
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 0;
+      height: 3px;
+      border-radius: 999px 999px 0 0;
+      background: var(--brand);
+    }
+    .feature-page { display: none; }
+    .feature-page.active { display: block; }
+    .module-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .module-kicker {
+      font-size: 10px;
+      color: var(--gray-500);
+      line-height: 1.2;
+    }
+    .module-title {
+      margin-top: 2px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gray-900);
+      line-height: 1.25;
+    }
+    .module-copy {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--gray-700);
+      line-height: 1.5;
+    }
+    .tool-btn {
+      width: 100%;
+      margin-top: 10px;
+      border: 1px solid var(--gray-200);
+      background: #fff;
+      color: var(--gray-900);
+    }
+    .tool-btn:hover:not(:disabled) {
+      border-color: var(--brand);
+      color: var(--brand);
+      background: #FFF5F5;
+    }
 
     .status {
       margin-top: 12px;
@@ -772,55 +870,97 @@
         <div id="failure-items"></div>
       </div>
 
-      <div class="page-title" id="page-title"><span class="skeleton skeleton-title">加载中…</span></div>
-      <div class="url-block" id="url-display">
-        <span class="label">链接</span><span id="current-url"><span class="skeleton skeleton-url">加载中…</span></span>
+      <div class="feature-tabs">
+        <button class="feature-tab active" id="tab-note-extract" data-page="page-note-extract">笔记提取</button>
+        <button class="feature-tab" id="tab-shop-products" data-page="page-shop-products">店铺商品</button>
       </div>
 
-      <!-- 重复提示 -->
-      <div id="dup-hint" class="status duplicate" style="display:none">
-        <div class="title">⚠️ 这条笔记已经收录过</div>
-        <!-- v4.3.0 B035 fix：整段可点击跳飞书表（不只是底部按钮） -->
-        <div id="dup-detail" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px" title="点击打开飞书表查看这行">行号加载中…</div>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <button class="btn-mini" id="btn-dup-open" style="width:auto;height:30px;padding:0 12px;font-size:12px">✏️ 在飞书表里改这行</button>
-          <button class="btn-mini" id="btn-dup-skip" style="width:auto;height:30px;padding:0 12px;font-size:12px">跳过</button>
-        </div>
+      <div class="feature-page active" id="page-note-extract">
+        <section class="module-section module-note">
+          <div class="module-head">
+            <div>
+              <div class="module-kicker">当前笔记</div>
+              <div class="module-title">笔记提取</div>
+            </div>
+          </div>
+
+          <div class="page-title" id="page-title"><span class="skeleton skeleton-title">加载中…</span></div>
+          <div class="url-block" id="url-display">
+            <span class="label">链接</span><span id="current-url"><span class="skeleton skeleton-url">加载中…</span></span>
+          </div>
+
+          <!-- 重复提示 -->
+          <div id="dup-hint" class="status duplicate" style="display:none">
+            <div class="title">⚠️ 这条笔记已经收录过</div>
+            <!-- v4.3.0 B035 fix：整段可点击跳飞书表（不只是底部按钮） -->
+            <div id="dup-detail" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px" title="点击打开飞书表查看这行">行号加载中…</div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn-mini" id="btn-dup-open" style="width:auto;height:30px;padding:0 12px;font-size:12px">✏️ 在飞书表里改这行</button>
+              <button class="btn-mini" id="btn-dup-skip" style="width:auto;height:30px;padding:0 12px">跳过</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="note-input">备注（可选）</label>
+            <textarea id="note-input" placeholder="写点你为啥存这条…例如：开头钩子值得学"></textarea>
+          </div>
+
+          <div class="field">
+            <label for="category-select">收录到哪个分类（sheet）？</label>
+            <div class="category-row">
+              <select id="category-select" class="category-select">
+                <option value="">加载中…</option>
+              </select>
+              <button id="btn-new-category" class="btn-mini" title="新建分类" style="width:auto;min-width:88px;height:36px;padding:0 12px;font-size:13px;font-weight:500;border:1px solid var(--brand);color:var(--brand);background:#fff">+ 新分类</button>
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn-primary" id="btn-collect">📥 收录到飞书</button>
+            <button class="btn btn-secondary" id="btn-open-sheet" title="打开飞书表">🔗</button>
+          </div>
+
+          <div class="status" id="status"></div>
+
+          <!-- 最近收录列表（默认展开） -->
+          <div class="recent-toggle" id="recent-toggle">
+            <span id="recent-toggle-icon">▼</span>
+            <span>📜 最近收录</span>
+          </div>
+          <div class="recent-list show" id="recent-list">
+            <div style="padding:8px 10px">
+              <span class="skeleton skeleton-line" style="width:80%"></span>
+              <span class="skeleton skeleton-line" style="width:60%"></span>
+              <span class="skeleton skeleton-line" style="width:70%"></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="module-section module-comments">
+          <div class="module-head">
+            <div>
+              <div class="module-kicker">评论区工具</div>
+              <div class="module-title">评论区提取</div>
+            </div>
+          </div>
+          <div class="module-copy">当前笔记的主评论、回复、点赞数和评论图片。</div>
+          <button class="btn tool-btn" id="btn-comments-prototype">提取评论</button>
+          <div class="status" id="comments-prototype-status"></div>
+        </section>
       </div>
 
-      <div class="field">
-        <label for="note-input">备注（可选）</label>
-        <textarea id="note-input" placeholder="写点你为啥存这条…例如：开头钩子值得学"></textarea>
-      </div>
-
-      <div class="field">
-        <label for="category-select">收录到哪个分类（sheet）？</label>
-        <div class="category-row">
-          <select id="category-select" class="category-select">
-            <option value="">加载中…</option>
-          </select>
-          <button id="btn-new-category" class="btn-mini" title="新建分类" style="width:auto;min-width:88px;height:36px;padding:0 12px;font-size:13px;font-weight:500;border:1px solid var(--brand);color:var(--brand);background:#fff">+ 新分类</button>
-        </div>
-      </div>
-
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btn-collect">📥 收录到飞书</button>
-        <button class="btn btn-secondary" id="btn-open-sheet" title="打开飞书表">🔗</button>
-      </div>
-
-      <div class="status" id="status"></div>
-
-      <!-- 最近收录列表（默认展开） -->
-      <div class="recent-toggle" id="recent-toggle">
-        <span id="recent-toggle-icon">▼</span>
-        <span>📜 最近收录</span>
-      </div>
-      <div class="recent-list show" id="recent-list">
-        <div style="padding:8px 10px">
-          <span class="skeleton skeleton-line" style="width:80%"></span>
-          <span class="skeleton skeleton-line" style="width:60%"></span>
-          <span class="skeleton skeleton-line" style="width:70%"></span>
-        </div>
+      <div class="feature-page" id="page-shop-products">
+        <section class="module-section module-shop">
+          <div class="module-head">
+            <div>
+              <div class="module-kicker">商品页工具</div>
+              <div class="module-title">店铺商品</div>
+            </div>
+          </div>
+          <div class="module-copy">当前商品页对应店铺的商品，直接写入「店铺商品提取」表。</div>
+          <button class="btn tool-btn" id="btn-shop-products-prototype">提取并写入飞书</button>
+          <div class="status" id="shop-products-status"></div>
+        </section>
       </div>
     </div>
   </div>

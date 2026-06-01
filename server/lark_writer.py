@@ -38,6 +38,12 @@ PROFILE_COLLECT_BASE_HEADERS = [
     "话题标签", "笔记链接", "图片数量", "封面图", "全部图片下载链接",
 ]
 PROFILE_COLLECT_META_HEADERS = ["采集时间", "采集来源", "状态"]
+SHOP_PRODUCTS_SHEET_TITLE = "店铺商品提取"
+SHOP_PRODUCTS_LAST_COL = "K"
+SHOP_PRODUCT_HEADERS = [
+    "序号", "店铺名", "店铺ID", "商品名", "商品链接", "商品ID",
+    "到手价", "已售数", "采集时间", "采集来源", "异常备注",
+]
 
 # v4.3.4 B034 v6：F 列文案预处理 — 把 \n 直接删除（无分隔符）
 # 飞书 row height fixedSize 对超长 cellValue silent fail，唯一压住行高的办法是源头不写 \n
@@ -1488,6 +1494,22 @@ class LarkWriter:
                 rows = self.read_range(spreadsheet_token, sid, "A1:N1000")
             except LarkAPIError:
                 continue
+            header = rows[0] if rows else []
+            def header_cell(idx):
+                value = header[idx] if len(header) > idx else ""
+                if isinstance(value, str):
+                    return value
+                if isinstance(value, list) and value:
+                    first = value[0]
+                    if isinstance(first, dict):
+                        return first.get("text") or ""
+                return ""
+            if not (
+                header_cell(1) == "笔记链接"
+                and header_cell(2) == "状态"
+                and header_cell(3) == "标题"
+            ):
+                continue
             for i, row in enumerate(rows[1:], start=2):
                 if not row:
                     continue
@@ -1654,6 +1676,253 @@ class LarkWriter:
         return {
             "stats": result_full["stats"],
             "recent": all_records[:recent_limit],
+        }
+
+    # ============ 店铺商品提取（商品页工具） ============
+
+    def setup_shop_products_template(self, spreadsheet_token: str,
+                                     sheet_id: str):
+        """为「店铺商品提取」sheet 写入表头和基础样式。"""
+        try:
+            self.write_range(spreadsheet_token, sheet_id,
+                             f"A1:{SHOP_PRODUCTS_LAST_COL}1",
+                             [list(SHOP_PRODUCT_HEADERS)])
+        except Exception:
+            pass
+
+        col_widths = {
+            "A": 60,   # 序号
+            "B": 180,  # 店铺名
+            "C": 160,  # 店铺ID
+            "D": 280,  # 商品名
+            "E": 260,  # 商品链接
+            "F": 180,  # 商品ID
+            "G": 90,   # 到手价
+            "H": 90,   # 已售数
+            "I": 150,  # 采集时间
+            "J": 110,  # 采集来源
+            "K": 260,  # 异常备注
+        }
+        for col, width in col_widths.items():
+            col_idx = ord(col) - ord("A")
+            try:
+                self._api(
+                    "POST",
+                    f"/sheets/v2/spreadsheets/{spreadsheet_token}/dimension_range",
+                    json={
+                        "dimension": {
+                            "sheetId": sheet_id,
+                            "majorDimension": "COLUMNS",
+                            "startIndex": col_idx,
+                            "endIndex": col_idx + 1,
+                        },
+                        "dimensionProperties": {"fixedSize": width},
+                    },
+                )
+            except Exception:
+                pass
+
+        try:
+            self._api(
+                "POST",
+                f"/sheets/v2/spreadsheets/{spreadsheet_token}/sheets_batch_update",
+                json={"requests": [{
+                    "updateSheet": {
+                        "properties": {
+                            "sheetId": sheet_id,
+                            "frozenRowCount": 1,
+                            "frozenColCount": 1,
+                        }
+                    }
+                }]},
+            )
+        except Exception:
+            pass
+
+        try:
+            self._set_cell_style(
+                spreadsheet_token, sheet_id, f"A1:{SHOP_PRODUCTS_LAST_COL}1",
+                font={"bold": True, "fontSize": "14pt/1.5", "clean": False},
+                fore_color="#FFFFFF",
+                back_color="#1F4E79",
+                h_align=1,
+                v_align=1,
+                borders={
+                    "type": "FULL_BORDER",
+                    "color": "#FFFFFF",
+                    "style": "1",
+                },
+            )
+        except Exception:
+            pass
+
+        try:
+            self.set_row_height(spreadsheet_token, sheet_id, 1, height=40)
+        except Exception:
+            pass
+
+        actual_rows = self._get_sheet_row_count(spreadsheet_token, sheet_id)
+        row_end = min(max(actual_rows, 2), 1000)
+        try:
+            self._apply_zebra_stripes(spreadsheet_token, sheet_id,
+                                      row_start=2, row_end=row_end,
+                                      last_col=SHOP_PRODUCTS_LAST_COL)
+        except Exception:
+            pass
+        try:
+            self.set_row_height_range(spreadsheet_token, sheet_id, 2, row_end,
+                                      height=80)
+        except Exception:
+            pass
+
+    def ensure_shop_products_sheet(self, spreadsheet_token: str) -> dict:
+        """确保专用「店铺商品提取」sheet 存在。"""
+        sheets = self.get_sheets_info(spreadsheet_token, use_cache=False)
+        for sheet in sheets:
+            if sheet["title"] == SHOP_PRODUCTS_SHEET_TITLE:
+                return {
+                    "sheet_id": sheet["sheet_id"],
+                    "title": sheet["title"],
+                    "created": False,
+                }
+        new_sheet = self.create_sheet(spreadsheet_token,
+                                      SHOP_PRODUCTS_SHEET_TITLE)
+        self.setup_shop_products_template(spreadsheet_token,
+                                          new_sheet["sheet_id"])
+        return {
+            "sheet_id": new_sheet["sheet_id"],
+            "title": new_sheet["title"],
+            "created": True,
+        }
+
+    def _next_shop_product_row_and_seq(self, spreadsheet_token: str,
+                                       sheet_id: str) -> tuple:
+        rows = self.read_range(spreadsheet_token, sheet_id, "A2:A10000")
+        max_seq = 0
+        last_row = 1
+        for idx, row in enumerate(rows, start=2):
+            if not row or row[0] in ("", None):
+                continue
+            last_row = idx
+            try:
+                max_seq = max(max_seq, int(float(row[0])))
+            except Exception:
+                pass
+        return last_row + 1, max_seq + 1
+
+    def build_shop_product_row(self, seq: int, shop_info: dict,
+                               product: dict, source: str,
+                               remark: str = "") -> list:
+        shop_info = shop_info or {}
+        product = product or {}
+        shop_name = (
+            shop_info.get("shopName")
+            or shop_info.get("shop_name")
+            or product.get("shopName")
+            or ""
+        )
+        seller_id = (
+            shop_info.get("sellerId")
+            or shop_info.get("seller_id")
+            or product.get("sellerId")
+            or product.get("seller_id")
+            or ""
+        )
+        product_name = (
+            product.get("name")
+            or product.get("title")
+            or product.get("card_title")
+            or ""
+        )
+        goods_url = product.get("goodsUrl") or product.get("goods_url") or ""
+        item_id = (
+            product.get("itemId")
+            or product.get("item_id")
+            or product.get("goodsId")
+            or product.get("goods_id")
+            or product.get("skuId")
+            or product.get("sku_id")
+            or ""
+        )
+        deal_price = (
+            product.get("dealPrice")
+            if product.get("dealPrice") not in (None, "")
+            else product.get("deal_price", "")
+        )
+        sold_count = (
+            product.get("soldCount")
+            if product.get("soldCount") not in (None, "")
+            else product.get("sold_count", "")
+        )
+
+        missing = []
+        for label, value in [
+            ("店铺名", shop_name),
+            ("店铺ID", seller_id),
+            ("商品名", product_name),
+            ("商品链接", goods_url),
+            ("商品ID", item_id),
+            ("到手价", deal_price),
+            ("已售数", sold_count),
+        ]:
+            if value in (None, ""):
+                missing.append(label)
+        notes = []
+        if remark:
+            notes.append(str(remark))
+        if missing:
+            notes.append("缺字段：" + "、".join(missing))
+        product_warning = product.get("warning") or product.get("error") or ""
+        if product_warning:
+            notes.append(str(product_warning)[:180])
+
+        product_link = (
+            {"type": "url", "text": goods_url, "link": goods_url}
+            if goods_url else ""
+        )
+        return [
+            seq,
+            shop_name,
+            seller_id,
+            product_name,
+            product_link,
+            item_id,
+            deal_price,
+            sold_count,
+            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            source,
+            " | ".join(notes),
+        ]
+
+    def append_shop_products(self, spreadsheet_token: str, shop_info: dict,
+                             products: list, source: str = "店铺商品提取",
+                             remark: str = "") -> dict:
+        sheet = self.ensure_shop_products_sheet(spreadsheet_token)
+        next_row, next_seq = self._next_shop_product_row_and_seq(
+            spreadsheet_token, sheet["sheet_id"],
+        )
+        rows = [
+            self.build_shop_product_row(next_seq + idx, shop_info, product,
+                                        source, remark=remark)
+            for idx, product in enumerate(products or [])
+        ]
+        if rows:
+            end_row = next_row + len(rows) - 1
+            self.write_range(
+                spreadsheet_token, sheet["sheet_id"],
+                f"A{next_row}:{SHOP_PRODUCTS_LAST_COL}{end_row}",
+                rows,
+            )
+        else:
+            end_row = next_row - 1
+        self.invalidate_cache(spreadsheet_token)
+        return {
+            "sheet_id": sheet["sheet_id"],
+            "sheet_title": sheet["title"],
+            "created": sheet["created"],
+            "written": len(rows),
+            "start_row": next_row,
+            "end_row": end_row,
         }
 
     # ============ 对标账号库（v4.4.0 新增） ============

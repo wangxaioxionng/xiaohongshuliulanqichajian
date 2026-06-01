@@ -125,6 +125,16 @@ function normalizeXhsNoteUrl(rawUrl) {
   }
 }
 
+function isXhsCommercePage(rawUrl) {
+  try {
+    const u = new URL(String(rawUrl || ""), "https://www.xiaohongshu.com");
+    if (!/xiaohongshu\.com$/i.test(u.hostname)) return false;
+    return /\/goods-detail\/[^/?#]+/.test(u.pathname) || /\/vendor\/[^/?#]+/.test(u.pathname);
+  } catch (e) {
+    return false;
+  }
+}
+
 function extractActiveNoteUrlFromPage() {
   function normalize(rawUrl) {
     try {
@@ -220,6 +230,132 @@ function setStatus(type, html) {
   el.innerHTML = html;
 }
 
+function showToolStatus(targetId, type, html) {
+  const el = document.getElementById(targetId);
+  if (!el) return;
+  el.className = `status show ${type}`;
+  el.innerHTML = html;
+}
+
+function formatPrototypeNumber(value) {
+  const num = Number(value || 0);
+  if (!Number.isFinite(num)) return "0";
+  return num.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+}
+
+async function getPrototypeTabId() {
+  if (AL_STATE.tabId) return AL_STATE.tabId;
+  const tab = await getCurrentTab();
+  AL_STATE.tabId = tab.id;
+  return tab.id;
+}
+
+function setActiveFeatureTab(pageId) {
+  document.querySelectorAll(".feature-tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.page === pageId);
+  });
+  document.querySelectorAll(".feature-page").forEach((page) => {
+    page.classList.toggle("active", page.id === pageId);
+  });
+}
+
+async function handleShopProductsPrototype() {
+  const btn = document.getElementById("btn-shop-products-prototype");
+  const oldText = btn ? btn.textContent : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "提取中...";
+  }
+  showToolStatus("shop-products-status", "loading", "正在读取当前店铺商品，并写入「店铺商品提取」表。");
+  try {
+    const cfg = await getConfig();
+    if (!isAuthenticated(cfg)) {
+      throw new Error("还没登录，请先完成飞书登录和绑定表");
+    }
+    const tabId = await getPrototypeTabId();
+    const resp = await sendRuntimeMessage({
+      type: "xhs_shop_products_extract_start",
+      payload: { tab_id: tabId },
+    });
+    if (!resp || !resp.ok) throw new Error(resp?.error || "店铺商品提取失败");
+    const result = resp.result || {};
+    const summary = result.summary || {};
+    const shop = result.shopInfo || {};
+    const products = result.products || [];
+    if (!products.length) {
+      throw new Error("没有提取到可写入的店铺商品");
+    }
+    const warnings = (result.warnings || []).slice(0, 2).map((item) => `<div>${escapeHTML(item)}</div>`).join("");
+    const writeResult = await apiShopProductsCollect(cfg, {
+      shop_info: shop,
+      products,
+      source: "插件店铺商品提取",
+      remark: (result.warnings || []).join(" | "),
+    });
+    showToolStatus(
+      "shop-products-status",
+      "success",
+      `<div class="title">店铺商品已写入飞书</div>
+       <div>店铺：${escapeHTML(shop.shopName || shop.sellerId || "未识别名称")}</div>
+       <div class="meta">
+         <span>商品 ${formatPrototypeNumber(summary.totalProducts)}</span>
+         <span>销量 ${formatPrototypeNumber(summary.totalSoldCount)}</span>
+         <span>写入 ${formatPrototypeNumber(writeResult.written)} 条</span>
+       </div>
+       <div style="margin-top:6px;color:#71717A">表格：${escapeHTML(writeResult.sheet_title || "店铺商品提取")}，第 ${writeResult.start_row || "-"}-${writeResult.end_row || "-"} 行</div>
+       ${warnings ? `<div style="margin-top:6px">${warnings}</div>` : ""}
+       <div style="margin-top:6px;color:#71717A">字段：店铺名、店铺ID、商品名、商品链接、商品ID、到手价、已售数。</div>`,
+    );
+  } catch (e) {
+    showToolStatus("shop-products-status", "error", `店铺商品提取失败：${escapeHTML(e.message || "未知错误")}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = oldText;
+    }
+  }
+}
+
+async function handleCommentsPrototype() {
+  const btn = document.getElementById("btn-comments-prototype");
+  const oldText = btn ? btn.textContent : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "提取中...";
+  }
+  showToolStatus("comments-prototype-status", "loading", "正在滚动评论区并展开回复，本地原型不会写入飞书。");
+  try {
+    const tabId = await getPrototypeTabId();
+    const resp = await sendRuntimeMessage({
+      type: "xhs_comments_extract_start",
+      payload: { tab_id: tabId },
+    });
+    if (!resp || !resp.ok) throw new Error(resp?.error || "评论提取失败");
+    const result = resp.result || {};
+    const note = result.noteInfo || {};
+    const replyCount = (result.comments || []).filter((item) => item.isReply).length;
+    showToolStatus(
+      "comments-prototype-status",
+      "success",
+      `<div class="title">评论已提取</div>
+       <div>笔记：${escapeHTML(note.title || "未识别标题")}</div>
+       <div class="meta">
+         <span>评论 ${formatPrototypeNumber(result.total)}</span>
+         <span>回复 ${formatPrototypeNumber(replyCount)}</span>
+         <span>展开 ${formatPrototypeNumber(result.expandedReplies)}</span>
+       </div>
+       <div style="margin-top:6px;color:#71717A">本阶段只验证采集链路，暂未写入飞书。</div>`,
+    );
+  } catch (e) {
+    showToolStatus("comments-prototype-status", "error", `评论提取失败：${escapeHTML(e.message || "未知错误")}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = oldText;
+    }
+  }
+}
+
 function hideStatus() {
   document.getElementById("status").className = "status";
 }
@@ -267,7 +403,10 @@ async function apiListSheets(cfg) {
   const resp = await fetch(`${cfg.endpoint}/api/sheets`, {
     headers: authHeaders(cfg),
   });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({}));
+    throw new Error(data.detail || `HTTP ${resp.status}`);
+  }
   return resp.json();
 }
 
@@ -275,8 +414,25 @@ async function apiDashboard(cfg, limit = 5) {
   const resp = await fetch(`${cfg.endpoint}/api/dashboard?limit=${limit}`, {
     headers: authHeaders(cfg),
   });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({}));
+    throw new Error(data.detail || `HTTP ${resp.status}`);
+  }
   return resp.json();
+}
+
+async function apiShopProductsCollect(cfg, payload) {
+  const resp = await fetch(`${cfg.endpoint}/api/shop-products/collect`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(cfg),
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+  return data;
 }
 
 async function apiFailures(cfg) {
@@ -325,6 +481,10 @@ async function loadCategories(cfg) {
     const data = await apiListSheets(cfg);
     const sheets = data.sheets || [];
     const defaultSheetId = data.default_sheet_id;
+    if (!sheets.length) {
+      select.innerHTML = `<option value="">没有可用分类，请先绑定飞书表</option>`;
+      return;
+    }
     // 上次用的分类
     const remembered = await new Promise((resolve) => {
       chrome.storage.local.get([LAST_CATEGORY_KEY], (d) =>
@@ -389,6 +549,14 @@ async function loadDashboard(cfg, force = false) {
     renderDashboard(data);
   } catch (err) {
     console.warn("dashboard 加载失败：", err);
+    renderDashboardError(err);
+  }
+}
+
+function renderDashboardError(err) {
+  const list = document.getElementById("recent-list");
+  if (list) {
+    list.innerHTML = `<div style="color:var(--red);text-align:center;padding:12px">最近收录加载失败：${escapeHTML(err.message || "未知错误")}</div>`;
   }
 }
 
@@ -621,6 +789,8 @@ async function init() {
   const url = tab.url || "";
   const rawTitle = tab.title || "";
   const cfg = await getConfig();
+  AL_STATE.tabId = tab.id;
+  AL_STATE.cfg = cfg;
 
   // v4：未登录 → 跳 onboarding
   if (!isAuthenticated(cfg)) {
@@ -661,6 +831,7 @@ async function init() {
 
   const resolvedNoteUrl = await resolveCurrentNoteUrl(tab);
   AL_STATE.resolvedNoteUrl = resolvedNoteUrl || "";
+  const isCommercePage = isXhsCommercePage(url);
 
   // v4.4.0：判断是不是小红书账号主页（/user/profile/xxx）
   // 如果是 → 显示账号库卡片，隐藏笔记收录 UI，但允许用户继续往下看（不强切）
@@ -673,7 +844,7 @@ async function init() {
     return;
   }
 
-  if (!resolvedNoteUrl && !normalizeXhsNoteUrl(url) && !/xhslink\.com/i.test(url)) {
+  if (!resolvedNoteUrl && !normalizeXhsNoteUrl(url) && !/xhslink\.com/i.test(url) && !isCommercePage) {
     document.getElementById("not-xhs").style.display = "block";
     document.getElementById("main").style.display = "none";
     return;
@@ -807,6 +978,7 @@ async function handleCollect() {
     // 收录成功/重复/更新 → 清掉仪表盘缓存
     if (["ok", "duplicate", "updated"].includes(r.status)) {
       chrome.storage.local.remove(DASHBOARD_CACHE_KEY);
+      loadDashboard(cfg, true);
     }
     if (r.status === "updated") {
       setStatus(
@@ -902,7 +1074,12 @@ function escapeHTML(s) {
 
 document.addEventListener("DOMContentLoaded", () => {
   init();
+  document.querySelectorAll(".feature-tab").forEach((tab) => {
+    tab.addEventListener("click", () => setActiveFeatureTab(tab.dataset.page));
+  });
   document.getElementById("btn-collect").addEventListener("click", handleCollect);
+  document.getElementById("btn-shop-products-prototype").addEventListener("click", handleShopProductsPrototype);
+  document.getElementById("btn-comments-prototype").addEventListener("click", handleCommentsPrototype);
   document.getElementById("btn-open-sheet").addEventListener("click", () => {
     // 优先用 whoami 返回的；fallback 到默认飞书首页
     const target = CACHED_SHEET_URL || SHEET_URL_FALLBACK;

@@ -38,7 +38,8 @@ from collector import collect_one
 from lark_writer import (
     LarkWriter, LarkAuthError, LarkAPIError,
     LAST_COL as LAST_COL_LETTER, MULTI_IMAGE_SHEET_TITLES,
-    flatten_desc, resolve_wiki_to_sheet_token, extract_hashtags,
+    SHOP_PRODUCTS_SHEET_TITLE, flatten_desc, resolve_wiki_to_sheet_token,
+    extract_hashtags,
 )
 
 # ---------- 配置 ----------
@@ -77,7 +78,7 @@ writer = LarkWriter(
 )
 
 # ---------- FastAPI ----------
-app = FastAPI(title="xhs-collect API", version="4.7.3")
+app = FastAPI(title="xhs-collect API", version="4.8.0")
 
 # CORS：v4 加 Authorization header（JWT 用）
 app.add_middleware(
@@ -116,6 +117,13 @@ class ProfileCollectRequest(BaseModel):
     note_urls: Optional[list] = None
     max_items: Optional[int] = None
     source: Optional[str] = "账号全采集"
+
+
+class ShopProductsCollectRequest(BaseModel):
+    shop_info: Optional[dict] = {}
+    products: Optional[list] = []
+    source: Optional[str] = "店铺商品提取"
+    remark: Optional[str] = ""
 
 
 # ---------- 工具 ----------
@@ -210,6 +218,19 @@ def _sheet_saves_all_images(spreadsheet_token: str, sheet_id: str) -> bool:
     """只有爆款图类 sheet 需要保存一条笔记里的全部图片。"""
     title = writer.get_sheet_title(spreadsheet_token, sheet_id)
     return title in MULTI_IMAGE_SHEET_TITLES
+
+
+def _is_note_category_sheet(title: str) -> bool:
+    """popup 的分类下拉只展示笔记收录分类，排除工具专用表。"""
+    if not title:
+        return False
+    if title == SHOP_PRODUCTS_SHEET_TITLE:
+        return False
+    if title in getattr(writer, "ACCOUNT_LIB_SHEETS", ()):
+        return False
+    if title.endswith("全采集"):
+        return False
+    return True
 
 
 def _prepare_images(data: dict, save_all_images: bool) -> tuple:
@@ -1238,9 +1259,15 @@ x_auth_token: Optional[str] = Header(None)):
     """列出当前用户飞书表里的所有 sheet（供 popup 分类下拉用）。"""
     user = auth.require_active_with_sheet(authorization, x_auth_token)
     try:
-        sheets = writer.get_sheets_info(user["spreadsheet_token"])
+        sheets = [
+            sheet for sheet in writer.get_sheets_info(user["spreadsheet_token"])
+            if _is_note_category_sheet(sheet.get("title", ""))
+        ]
+        default_sheet_id = user["default_sheet_id"]
+        if sheets and not any(s["sheet_id"] == default_sheet_id for s in sheets):
+            default_sheet_id = sheets[0]["sheet_id"]
         return {"sheets": sheets,
-                "default_sheet_id": user["default_sheet_id"]}
+                "default_sheet_id": default_sheet_id}
     except (LarkAuthError, LarkAPIError) as e:
         raise HTTPException(status_code=502, detail=str(e))
 
@@ -1637,6 +1664,30 @@ authorization: Optional[str] = Header(None),
     user = auth.require_active_with_sheet(authorization, x_auth_token)
     try:
         return writer.load_dashboard(user["spreadsheet_token"], recent_limit=limit)
+    except (LarkAuthError, LarkAPIError) as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/api/shop-products/collect")
+def shop_products_collect(req: ShopProductsCollectRequest,
+authorization: Optional[str] = Header(None),
+                          x_auth_token: Optional[str] = Header(None)):
+    """把插件提取到的店铺商品写入专用「店铺商品提取」sheet。"""
+    user = auth.require_active_with_sheet(authorization, x_auth_token)
+    products = req.products or []
+    if not products:
+        raise HTTPException(status_code=400, detail="没有可写入的店铺商品")
+    try:
+        return {
+            "status": "ok",
+            **writer.append_shop_products(
+                user["spreadsheet_token"],
+                req.shop_info or {},
+                products,
+                source=req.source or "店铺商品提取",
+                remark=req.remark or "",
+            ),
+        }
     except (LarkAuthError, LarkAPIError) as e:
         raise HTTPException(status_code=502, detail=str(e))
 
@@ -2396,6 +2447,7 @@ def check_permissions(spreadsheet_token: Optional[str] = Query(None),
 def api_me(user: dict = Depends(auth.require_user)):
     """当前用户信息（含状态/绑定情况）。"""
     if user.get("is_legacy"):
+        has_sheet = bool(user.get("spreadsheet_token"))
         return {
             "user_id": None,
             "open_id": None,
@@ -2405,7 +2457,11 @@ def api_me(user: dict = Depends(auth.require_user)):
             "status": "active",
             "spreadsheet_token": user["spreadsheet_token"],
             "needs_activation": False,
-            "needs_bind_sheet": False,
+            "needs_bind_sheet": not has_sheet,
+            "sheet_url": (
+                f"https://my.feishu.cn/sheets/{user['spreadsheet_token']}"
+                if has_sheet else ""
+            ),
         }
     row = db.get_user_by_open_id(user["open_id"])
     return {
@@ -2419,6 +2475,10 @@ def api_me(user: dict = Depends(auth.require_user)):
         "spreadsheet_token": row["spreadsheet_token"],
         "needs_activation": row["status"] != "active",
         "needs_bind_sheet": not row["spreadsheet_token"],
+        "sheet_url": (
+            f"https://my.feishu.cn/sheets/{row['spreadsheet_token']}"
+            if row["spreadsheet_token"] else ""
+        ),
     }
 
 

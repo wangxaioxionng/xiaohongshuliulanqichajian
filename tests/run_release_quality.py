@@ -22,8 +22,11 @@ CHECKS = [
     ("主页采集路由模式", ["python3", "tests/verify_profile_collect_route_mode.py"]),
     ("主页批量接口后端", ["python3", "tests/verify_profile_collect_playlist_backend.py"]),
     ("主页采集图片嵌入", ["python3", "tests/verify_profile_collect_image_embedding.py"]),
+    ("店铺商品与评论原型", ["python3", "tests/verify_shop_comments_prototype.py"]),
+    ("店铺商品写表后端", ["python3", "tests/verify_shop_products_sheet_backend.py"]),
     ("popup 脚本语法", ["node", "--check", "extension/popup.js"]),
     ("background 脚本语法", ["node", "--check", "extension/background.js"]),
+    ("commerce probe 脚本语法", ["node", "--check", "extension/xhs_commerce_probe.js"]),
     ("manifest JSON", ["python3", "-m", "json.tool", "extension/manifest.json"]),
     ("后台 Python 语法", ["python3", "-m", "py_compile", "server/app.py", "server/lark_writer.py", "server/auth.py", "server/db.py"]),
 ]

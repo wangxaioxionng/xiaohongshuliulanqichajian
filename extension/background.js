@@ -1537,11 +1537,69 @@ async function pollProfileCollectTask(taskId) {
   tick();
 }
 
+async function ensureXhsCommerceProbe(tabId) {
+  if (!tabId) throw new Error("未找到当前小红书页面标签页");
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["xhs_commerce_probe.js"],
+    world: "MAIN",
+  });
+}
+
+function extractScriptResult(results) {
+  const first = Array.isArray(results) ? results[0] : null;
+  return first ? first.result : null;
+}
+
+async function runXhsShopProductsPrototype(tabId) {
+  await ensureXhsCommerceProbe(tabId);
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN",
+    args: [{ maxPages: 5, maxDetailCount: 20 }],
+    func: async (options) => {
+      if (!window.__xhsCommercePrototype) throw new Error("店铺商品采集脚本未加载");
+      return window.__xhsCommercePrototype.extractShopProducts(options);
+    },
+  });
+  return extractScriptResult(results);
+}
+
+async function runXhsCommentsPrototype(tabId) {
+  await ensureXhsCommerceProbe(tabId);
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN",
+    args: [{ limit: 500, scrollRounds: 8, expandRounds: 4 }],
+    func: async (options) => {
+      if (!window.__xhsCommercePrototype) throw new Error("评论采集脚本未加载");
+      return window.__xhsCommercePrototype.extractComments(options);
+    },
+  });
+  return extractScriptResult(results);
+}
+
 // 暴露给 popup 调用（popup 关闭后 background 仍能弹通知）
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === "notify") {
     makeNotification(msg.level || "info", msg.title, msg.message);
     sendResponse({ ok: true });
+    return true;
+  }
+  if (msg && msg.type === "xhs_shop_products_extract_start") {
+    runXhsShopProductsPrototype(msg.payload && msg.payload.tab_id).then((result) => {
+      sendResponse({ ok: !!(result && result.ok), result, error: result && result.error });
+    }).catch((e) => {
+      sendResponse({ ok: false, error: String(e.message || e) });
+    });
+    return true;
+  }
+  if (msg && msg.type === "xhs_comments_extract_start") {
+    runXhsCommentsPrototype(msg.payload && msg.payload.tab_id).then((result) => {
+      sendResponse({ ok: !!(result && result.ok), result, error: result && result.error });
+    }).catch((e) => {
+      sendResponse({ ok: false, error: String(e.message || e) });
+    });
     return true;
   }
   if (msg && msg.type === "profile_collect_get_state") {
