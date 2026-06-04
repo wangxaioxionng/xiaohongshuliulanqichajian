@@ -37,7 +37,7 @@ import oauth_lark
 from collector import collect_one
 from lark_writer import (
     LarkWriter, LarkAuthError, LarkAPIError,
-    LAST_COL as LAST_COL_LETTER, MULTI_IMAGE_SHEET_TITLES,
+    LAST_COL as LAST_COL_LETTER, NOTE_MULTI_IMAGE_MAX_COLS, NOTE_TOTAL_COLS,
     SHOP_PRODUCTS_SHEET_TITLE, flatten_desc, resolve_wiki_to_sheet_token,
     extract_hashtags,
 )
@@ -78,7 +78,7 @@ writer = LarkWriter(
 )
 
 # ---------- FastAPI ----------
-app = FastAPI(title="xhs-collect API", version="4.8.0")
+app = FastAPI(title="xhs-collect API", version="4.8.1")
 
 # CORS：v4 加 Authorization header（JWT 用）
 app.add_middleware(
@@ -215,9 +215,9 @@ def _download_images(sources: list, limit: Optional[int] = None) -> list:
 
 
 def _sheet_saves_all_images(spreadsheet_token: str, sheet_id: str) -> bool:
-    """只有爆款图类 sheet 需要保存一条笔记里的全部图片。"""
+    """普通笔记分类 sheet 都保存全部图片，工具专用表排除。"""
     title = writer.get_sheet_title(spreadsheet_token, sheet_id)
-    return title in MULTI_IMAGE_SHEET_TITLES
+    return _is_note_category_sheet(title)
 
 
 def _is_note_category_sheet(title: str) -> bool:
@@ -234,12 +234,12 @@ def _is_note_category_sheet(title: str) -> bool:
 
 
 def _prepare_images(data: dict, save_all_images: bool) -> tuple:
-    """返回 (cover_bytes, all_image_bytes)。all_image_bytes 仅爆款图使用。"""
+    """返回 (cover_bytes, all_image_bytes)。普通笔记最多嵌入 20 张图。"""
     if save_all_images:
         sources = data.get("image_items") or data.get("image_urls") or []
         if not sources and data.get("cover_url"):
             sources = [data["cover_url"]]
-        images = _download_images(sources)
+        images = _download_images(sources, limit=NOTE_MULTI_IMAGE_MAX_COLS)
         cover = images[0] if images else None
         return cover, images
     cover = None
@@ -1055,6 +1055,8 @@ def _process_one(user: dict, url: str, note: str, tags: list,
                 "error": "用户没有配置 default_sheet_id 也未指定 sheet_id"}
 
     data = collect_one(url)
+    if not data.get("url"):
+        data["url"] = url
     note_id = data.get("note_id") or ""
 
     # 跨 sheet 去重（按策略决定后续动作）
@@ -1576,6 +1578,8 @@ authorization: Optional[str] = Header(None),
             raise HTTPException(status_code=400, detail="原行没有有效 URL")
         # 重新采集
         data = collect_one(url)
+        if not data.get("url"):
+            data["url"] = url
         note_id = data.get("note_id") or ""
         # 强制刷新缓存，防止误把 retry 行自己当成 existing
         writer.invalidate_cache(ss_token)
@@ -1589,7 +1593,7 @@ authorization: Optional[str] = Header(None),
                     writer.write_range(
                         ss_token, req.sheet_id,
                         f"A{req.row}:{LAST_COL_LETTER}{req.row}",
-                        [[""] * 14],
+                        [[""] * NOTE_TOTAL_COLS],
                     )
                 except Exception:
                     pass

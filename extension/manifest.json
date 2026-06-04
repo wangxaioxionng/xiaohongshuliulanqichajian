@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "小红书一键收录",
   "short_name": "xhs-collect",
-  "version": "4.8.0",
+  "version": "4.8.1",
   "description": "一键收录小红书笔记到飞书表。支持爆款图多图保存、账号库和账号前400篇全采集。",
 
   "action": {

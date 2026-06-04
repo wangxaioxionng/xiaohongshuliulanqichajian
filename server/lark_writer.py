@@ -26,12 +26,20 @@ COL = {
     "seq": "A", "url": "B", "status": "C", "title": "D", "cover": "E",
     "desc": "F", "liked": "G", "collected": "H", "comment": "I",
     "share": "J", "note_id": "K", "time": "L", "source": "M", "note": "N",
-    "tags": "O",
+    "tags": "O", "image_count": "P", "image_links": "Q",
 }
-LAST_COL = "O"
-NOTE_HEADERS = ["序号", "笔记链接", "状态", "标题", "封面图", "文案",
-                "点赞", "收藏", "评论", "分享", "笔记ID", "采集时间",
-                "来源", "我的备注", "话题标签"]
+NOTE_MULTI_IMAGE_MAX_COLS = 20
+NOTE_IMAGE_START_COL_INDEX = 18  # R 列，A-O 保持老字段不变，P/Q 放图片统计和下载链接
+NOTE_BASE_HEADERS = ["序号", "笔记链接", "状态", "标题", "封面图", "文案",
+                     "点赞", "收藏", "评论", "分享", "笔记ID", "采集时间",
+                     "来源", "我的备注", "话题标签"]
+NOTE_IMAGE_HEADERS = (
+    ["图片数量", "全部图片下载链接"] +
+    [f"图片{i}" for i in range(1, NOTE_MULTI_IMAGE_MAX_COLS + 1)]
+)
+NOTE_HEADERS = NOTE_BASE_HEADERS + NOTE_IMAGE_HEADERS
+NOTE_TOTAL_COLS = len(NOTE_HEADERS)
+LAST_COL = "AK"
 MULTI_IMAGE_SHEET_TITLES = ("爆款图", "爆款图片")
 PROFILE_COLLECT_BASE_HEADERS = [
     "序号", "店铺/账号名", "主页链接", "笔记标题", "图文文案",
@@ -189,6 +197,8 @@ class LarkWriter:
         # Failures 缓存
         self._failures_cache = {}
         self._failures_cache_ttl = 30  # 秒
+        # 普通笔记表多图列模板缓存，避免每条笔记重复写表头和样式
+        self._note_image_template_cache = set()
 
     def invalidate_cache(self, spreadsheet_token: str):
         """收录/更新数据后主动失效缓存（所有缓存一起清）。"""
@@ -359,18 +369,19 @@ class LarkWriter:
     def setup_multi_image_columns(self, spreadsheet_token: str,
                                   sheet_id: str,
                                   image_count: int) -> None:
-        """给爆款图 sheet 追加 图片2/图片3... 表头和基础样式。"""
-        if image_count <= 1:
+        """给普通笔记 sheet 追加图片数量、下载链接、图片1..20。"""
+        cache_key = (spreadsheet_token, sheet_id)
+        if cache_key in self._note_image_template_cache:
             return
-        # A-O 是主表，P 起放第 2 张图。image_count=2 -> 需要到 P 列。
-        last_col_index = 15 + image_count - 1
+
+        # A-O 是老字段，P/Q 放图片统计和链接，R 起放图片1..20。
+        last_col_index = NOTE_IMAGE_START_COL_INDEX + NOTE_MULTI_IMAGE_MAX_COLS - 1
         last_col = col_letter(last_col_index)
         self._ensure_min_columns(spreadsheet_token, sheet_id, last_col_index)
 
-        headers = [f"图片{i}" for i in range(2, image_count + 1)]
         try:
             self.write_range(spreadsheet_token, sheet_id, f"P1:{last_col}1",
-                             [headers])
+                             [list(NOTE_IMAGE_HEADERS)])
         except Exception as e:
             print(f"⚠️ 多图表头写入失败：{e}")
 
@@ -398,7 +409,13 @@ class LarkWriter:
         except Exception:
             pass
 
-        for idx in range(16, last_col_index + 1):
+        col_widths = {
+            16: 80,   # 图片数量
+            17: 320,  # 全部图片下载链接
+        }
+        for idx in range(NOTE_IMAGE_START_COL_INDEX, last_col_index + 1):
+            col_widths[idx] = 220
+        for idx, width in col_widths.items():
             try:
                 self._api(
                     "POST",
@@ -410,34 +427,51 @@ class LarkWriter:
                             "startIndex": idx - 1,
                             "endIndex": idx,
                         },
-                        "dimensionProperties": {"fixedSize": 220},
+                        "dimensionProperties": {"fixedSize": width},
                     },
                 )
             except Exception:
                 pass
+        self._note_image_template_cache.add(cache_key)
 
     def upload_images_to_cells(self, spreadsheet_token: str, sheet_id: str,
                                row_index: int, image_bytes_list: list,
                                note_id: str = "noid") -> dict:
-        """上传一组图片：第 1 张写 E 列，后续写 P/Q/R...。"""
+        """上传一组图片：第 1 张写 E 列封面，同时图片 1..N 写 R/S/T...。"""
         if not image_bytes_list:
             return {"ok": 0, "failed": []}
         self.setup_multi_image_columns(
-            spreadsheet_token, sheet_id, len(image_bytes_list),
+            spreadsheet_token, sheet_id, NOTE_MULTI_IMAGE_MAX_COLS,
         )
         ok = 0
         failed = []
-        for idx, image_bytes in enumerate(image_bytes_list, start=1):
-            target_col = COL["cover"] if idx == 1 else col_letter(14 + idx)
+        images = list(image_bytes_list or [])[:NOTE_MULTI_IMAGE_MAX_COLS]
+
+        def upload_one(col: str, image_bytes: bytes, name: str, index: int):
+            nonlocal ok
             try:
                 self.upload_image_to_cell(
                     spreadsheet_token, sheet_id, row_index, image_bytes,
-                    f"image_{idx}_{note_id}.jpg",
-                    col=target_col,
+                    name,
+                    col=col,
                 )
                 ok += 1
             except Exception as e:
-                failed.append({"index": idx, "error": str(e)[:200]})
+                failed.append({
+                    "index": index,
+                    "col": col,
+                    "error": str(e)[:200],
+                })
+
+        upload_one(COL["cover"], images[0], f"cover_{note_id}.jpg", 1)
+        for idx, image_bytes in enumerate(images, start=1):
+            target_col = col_letter(NOTE_IMAGE_START_COL_INDEX + idx - 1)
+            upload_one(
+                target_col,
+                image_bytes,
+                f"image_{idx}_{note_id}.jpg",
+                idx,
+            )
         return {"ok": ok, "failed": failed}
 
     def upload_profile_collect_images_to_cells(
@@ -543,45 +577,50 @@ class LarkWriter:
 
     def setup_sheet_template(self, spreadsheet_token: str, sheet_id: str):
         """为新建的 sheet 应用统一模板：
-        14 列表头 + 列宽 + 行高 + 冻结首行 + 状态下拉 +
+        标准表头 + 列宽 + 行高 + 冻结首行 + 状态下拉 +
         🆕 表头美化（加粗/居中/浅灰底/边框）+ 数据行斑马纹 + 全表边框。
 
         所有步骤失败都不抛异常，单步降级，确保至少写入表头。
 
-        样式规格（v4.3.7 升级深蓝表头 + 修 O 列范围 bug）：
+        样式规格：
         - 表头 #1F4E79 深蓝底 / #FFFFFF 白字 / 14px / 加粗 / 居中 / 边框
         - 数据行 12px / #374151 字 / 偶数行 #F3F6FB 淡蓝灰底 / 全边框
         - 表头行高 32 / 列宽按内容定制
         - 冻结第 1 行 + 第 A 列
         """
-        # 1. 写表头（v4.3.6 B037 加 O 列「话题标签」）
+        # 1. 写表头（A-O 保持老字段，P-AK 追加多图字段）
         try:
-            self.write_range(spreadsheet_token, sheet_id, "A1:O1",
+            self.write_range(spreadsheet_token, sheet_id, f"A1:{LAST_COL}1",
                              [list(NOTE_HEADERS)])
         except Exception:
             pass
 
         # 2. 列宽（按内容合理分配，参考 popup.js 实际写入字段）
-        # A 序号窄 / B URL 中 / C 状态 / D 标题宽 / E 封面图 / F 文案最宽 / G-J 数字 / K note_id / L 时间 / M 来源 / N 备注宽 / O 标签宽
+        # A-O 是老字段；P/Q 是图片统计和下载链接；R-AK 是图片1..20。
         col_widths = {
-            "A": 60,   # 序号
-            "B": 240,  # 笔记链接
-            "C": 100,  # 状态
-            "D": 280,  # 标题
-            "E": 220,  # 封面图（保持原值，配合 260 行高）
-            "F": 400,  # 文案
-            "G": 70,   # 点赞
-            "H": 70,   # 收藏
-            "I": 70,   # 评论
-            "J": 70,   # 分享
-            "K": 180,  # 笔记ID
-            "L": 130,  # 采集时间
-            "M": 100,  # 来源
-            "N": 220,  # 我的备注
-            "O": 300,  # 话题标签（v4.3.6）
+            1: 60,    # 序号
+            2: 240,   # 笔记链接
+            3: 100,   # 状态
+            4: 280,   # 标题
+            5: 220,   # 封面图
+            6: 400,   # 文案
+            7: 70,    # 点赞
+            8: 70,    # 收藏
+            9: 70,    # 评论
+            10: 70,   # 分享
+            11: 180,  # 笔记ID
+            12: 130,  # 采集时间
+            13: 100,  # 来源
+            14: 220,  # 我的备注
+            15: 300,  # 话题标签
+            16: 80,   # 图片数量
+            17: 320,  # 全部图片下载链接
         }
-        for col, width in col_widths.items():
-            col_idx = ord(col) - ord("A")
+        for idx in range(NOTE_IMAGE_START_COL_INDEX,
+                         NOTE_IMAGE_START_COL_INDEX + NOTE_MULTI_IMAGE_MAX_COLS):
+            col_widths[idx] = 220
+        for col_idx_1based, width in col_widths.items():
+            col_idx = col_idx_1based - 1
             try:
                 self._api(
                     "POST",
@@ -638,8 +677,7 @@ class LarkWriter:
         except Exception:
             pass
 
-        # 5. 🆕 表头样式（v4.3.7 升级：深蓝底 + 白字 + 加粗 + 居中 + 边框）
-        # ⚠️ 旧版本写的是 "A1:N1"，导致 O 列「话题标签」表头吃不到样式 — 这次顺手修
+        # 5. 表头样式：深蓝底 + 白字 + 加粗 + 居中 + 边框
         try:
             self._set_cell_style(
                 spreadsheet_token, sheet_id, f"A1:{LAST_COL}1",
@@ -693,7 +731,7 @@ class LarkWriter:
             self._apply_zebra_stripes(spreadsheet_token, sheet_id,
                                        row_start=2,
                                        row_end=row_end,
-                                       last_col=LAST_COL)  # v4.3.6 B037：跟 O 列
+                                       last_col=LAST_COL)
         except Exception as e:
             print(f"⚠️ 斑马纹设置失败：{e}")
 
@@ -953,9 +991,16 @@ class LarkWriter:
         # v4.3.6 B037：F 列文案先 extract hashtag → O 列「话题标签」，F 只剩纯文案
         raw_desc = data.get("desc", "")
         clean_desc, hashtags = extract_hashtags(flatten_desc(raw_desc))
+        image_urls = list(data.get("image_urls") or [])
+        image_cells = []
+        for idx in range(NOTE_MULTI_IMAGE_MAX_COLS):
+            url = image_urls[idx] if idx < len(image_urls) else ""
+            image_cells.append(
+                self._url_cell(url, f"图片{idx + 1}") if url else ""
+            )
         return [
             seq,
-            {"type": "url", "text": url, "link": url},
+            self._url_cell(url, url),
             "✅ 已采集",
             data.get("title", ""),
             "",  # E 列封面图占位
@@ -969,6 +1014,9 @@ class LarkWriter:
             source,
             notes_field,
             hashtags,  # O: 话题标签
+            len(image_urls),
+            "  ".join(image_urls),
+            *image_cells,
         ]
 
     def build_failure_row(self, seq: int, url: str, error: str,
@@ -983,6 +1031,9 @@ class LarkWriter:
             source,
             f"采集失败：{error[:200]}" + (f" | 备注：{note}" if note else ""),
             "",  # O: 话题标签（失败行没有）
+            0,
+            "",
+            *([""] * NOTE_MULTI_IMAGE_MAX_COLS),
         ]
 
     def write_record(self, spreadsheet_token: str, sheet_id: str,
@@ -991,6 +1042,9 @@ class LarkWriter:
                      image_bytes: bytes = None,
                      image_bytes_list: list = None) -> dict:
         """写入一条成功的采集数据。"""
+        self.setup_multi_image_columns(
+            spreadsheet_token, sheet_id, NOTE_MULTI_IMAGE_MAX_COLS,
+        )
         row = self.build_row(seq, data, source, note=note, tags=tags)
         self.write_range(spreadsheet_token, sheet_id,
                          f"A{row_idx}:{LAST_COL}{row_idx}", [row])
@@ -1015,7 +1069,7 @@ class LarkWriter:
                 self.write_range(
                     spreadsheet_token, sheet_id,
                     f"N{row_idx}:N{row_idx}",
-                    [[f"⚠️ 封面图嵌入失败: {e}"]],
+                    [[f"⚠️ 图片嵌入失败: {e}"]],
                 )
         # v4.3.0 B034 v2 修订：删掉旧的 set_row_height(260)
         # 原本写入后强制 260px 让封面图大显示，但跟方案 A（全表 32px 统一行高）冲突
@@ -1026,6 +1080,9 @@ class LarkWriter:
     def write_failure(self, spreadsheet_token: str, sheet_id: str,
                       row_idx: int, seq: int, url: str,
                       error: str, source: str, note: str = ""):
+        self.setup_multi_image_columns(
+            spreadsheet_token, sheet_id, NOTE_MULTI_IMAGE_MAX_COLS,
+        )
         row = self.build_failure_row(seq, url, error, source, note=note)
         self.write_range(spreadsheet_token, sheet_id,
                          f"A{row_idx}:{LAST_COL}{row_idx}", [row])

@@ -13,6 +13,7 @@ CHECKS = [
     ("账号主页状态兜底", ["python3", "tests/verify_profile_account_initial_state.py"]),
     ("账号统计解析", ["python3", "tests/verify_profile_account_stats_parser.py"]),
     ("笔记浮层识别", ["python3", "tests/verify_single_note_modal_detection.py"]),
+    ("普通笔记多图写表", ["python3", "tests/verify_single_note_multi_image_backend.py"]),
     ("主页链接质量", ["python3", "tests/verify_profile_collect_link_quality.py"]),
     ("主页采集进度展示", ["python3", "tests/verify_profile_collect_visibility.py"]),
     ("主页采集断点续采", ["python3", "tests/verify_profile_collect_checkpoint.py"]),
