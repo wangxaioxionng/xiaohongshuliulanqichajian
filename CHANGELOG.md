@@ -5,6 +5,13 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.8.5] - 2026-06-07
+
+### 修复
+- 修复小红书商品详情 template_data 新结构下单品销量无法写入「已售数」的问题
+- 现在可从 priceH5.itemAnalysisDataText 读取「已售38」并解析为 38
+- 新增真实接口结构回归测试，避免后续字段再漏
+
 ## [4.8.4] - 2026-06-07
 
 ### 变更

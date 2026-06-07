@@ -102,6 +102,8 @@
       firstNonEmpty(
         asArray(data.items)[0],
         asArray(data.skus)[0],
+        asArray(data.template_data)[0],
+        asArray(data.templateData)[0],
         data.item,
         data.sku,
         data.goods,
@@ -228,6 +230,8 @@
 
   function mergeProductDetail(product, payload) {
     const item = firstPayloadItem(payload);
+    const priceH5 = asObject(firstNonEmpty(item.priceH5, item.price_h5));
+    const descriptionMain = asObject(firstNonEmpty(item.descriptionMain, item.description_main));
     const priceInfo = asObject(firstNonEmpty(item.price_info, item.priceInfo, item.price));
     const delivery = asObject(firstNonEmpty(item.delivery, item.delivery_info, item.logistics));
     const shop = asObject(firstNonEmpty(item.shop, item.seller, item.store));
@@ -236,6 +240,10 @@
       item.sold_text,
       item.sold_count_text,
       item.sales_text,
+      item.itemAnalysisDataText,
+      item.item_analysis_data_text,
+      priceH5.itemAnalysisDataText,
+      priceH5.item_analysis_data_text,
       item.sold_count,
       item.sales,
       asObject(item.sale_info).sold_count,
@@ -256,7 +264,7 @@
 
     return {
       ...product,
-      name: cleanText(firstNonEmpty(item.name, item.title, item.card_title, product.name)),
+      name: cleanText(firstNonEmpty(descriptionMain.name, item.name, item.title, item.card_title, product.name)),
       originalPrice: originalPrice || product.originalPrice || 0,
       dealPrice: dealPrice || product.dealPrice || 0,
       soldCount: normalizeSoldCount(firstNonEmpty(item.soldCount, item.sold_count, item.sales, soldText)),

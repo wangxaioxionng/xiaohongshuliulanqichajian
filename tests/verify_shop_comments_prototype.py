@@ -254,6 +254,30 @@ if (merged.soldCount !== 12000 || merged.location !== "杭州" || merged.shippin
   throw new Error(`bad detail merge: ${{JSON.stringify(merged)}}`);
 }}
 
+const templateMerged = probe.mergeProductDetail(products[0], {{
+  data: {{
+    template_data: [{{
+      descriptionH5: "真实接口结构耳钉",
+      priceH5: {{
+        highlightPrice: 29.9,
+        itemAnalysisDataText: "已售38",
+        dealPrice: {{ price: "29.9" }}
+      }},
+      descriptionMain: {{
+        name: "【上新】十字架耳钉耳骨钉·316L医用钛钢",
+        itemId: "6a1c09fd445b6f00151cd59f"
+      }},
+      sellerH5: {{
+        name: "公主日记🎀的店",
+        salesVolume: "已售2115"
+      }}
+    }}]
+  }}
+}});
+if (templateMerged.soldCount !== 38 || templateMerged.name !== "【上新】十字架耳钉耳骨钉·316L医用钛钢") {{
+  throw new Error(`bad template_data detail merge: ${{JSON.stringify(templateMerged)}}`);
+}}
+
 const summary = probe.computeShopProductSummary([
   {{ dealPrice: 30, soldCount: 100 }},
   {{ dealPrice: 20, soldCount: 5 }},
