@@ -77,7 +77,7 @@ def main() -> None:
         "spreadsheet", "sheet", 7, [b"a", b"b"], image_cols=2,
     )
     assert upload_result["failed"] == []
-    assert uploaded_cols == ["I", "K", "L"]
+    assert uploaded_cols == ["M", "O", "P"]
 
 
 if __name__ == "__main__":

@@ -132,6 +132,18 @@ def main() -> None:
     assert detail["liked_count"] == 7514
     assert detail["collected_count"] == 381
     assert detail["comments_count"] == 67
+    assert detail["shared_count"] == 199
+
+    record = app._note_response_to_record(
+        detail,
+        "https://www.xiaohongshu.com/explore/note1?xsec_token=abc",
+        "https://www.xiaohongshu.com/user/profile/61b46d790000000010008153",
+        "测试账号",
+    )
+    assert record["liked_count"] == 7514
+    assert record["collected_count"] == 381
+    assert record["comments_count"] == 67
+    assert record["shared_count"] == 199
 
     class FakeWriter:
         def __init__(self):
@@ -174,6 +186,10 @@ def main() -> None:
         "title": "详情标题",
         "text": "详情正文 #详情[话题]#",
         "created_at": 1769737966,
+        "liked_count": 7514,
+        "collected_count": 381,
+        "comments_count": 67,
+        "shared_count": 199,
         "medias": [{"media_type": "image", "resource_url": "https://example.com/detail.jpg"}],
     }
 
@@ -203,6 +219,10 @@ def main() -> None:
     assert task["collect_mode"] == "rnote_user_posted_then_detail"
     assert fake_writer.rows[0]["title"] == "详情标题"
     assert fake_writer.rows[0]["text"] == "详情正文 #详情[话题]#"
+    assert fake_writer.rows[0]["liked_count"] == 7514
+    assert fake_writer.rows[0]["collected_count"] == 381
+    assert fake_writer.rows[0]["comments_count"] == 67
+    assert fake_writer.rows[0]["shared_count"] == 199
 
 
 if __name__ == "__main__":

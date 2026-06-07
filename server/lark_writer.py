@@ -43,7 +43,8 @@ LAST_COL = "AK"
 MULTI_IMAGE_SHEET_TITLES = ("爆款图", "爆款图片")
 PROFILE_COLLECT_BASE_HEADERS = [
     "序号", "店铺/账号名", "主页链接", "笔记标题", "图文文案",
-    "话题标签", "笔记链接", "图片数量", "封面图", "全部图片下载链接",
+    "话题标签", "笔记链接", "点赞", "收藏", "评论", "分享",
+    "图片数量", "封面图", "全部图片下载链接",
 ]
 PROFILE_COLLECT_META_HEADERS = ["采集时间", "采集来源", "状态"]
 SHOP_PRODUCTS_SHEET_TITLE = "店铺商品提取"
@@ -482,7 +483,7 @@ class LarkWriter:
         image_bytes_list: list,
         image_cols: int = 1,
     ) -> dict:
-        """账号全采集表：第 1 张写 I 列封面，同时图片 1..N 写 K/L/M...。"""
+        """账号全采集表：第 1 张写封面列，同时图片 1..N 写图片列。"""
         if not image_bytes_list:
             return {"ok": 0, "failed": []}
 
@@ -507,7 +508,8 @@ class LarkWriter:
                     "error": str(e)[:200],
                 })
 
-        upload_one("I", images[0], f"profile_cover_{row_index}.jpg", 1)
+        cover_col = col_letter(PROFILE_COLLECT_BASE_HEADERS.index("封面图") + 1)
+        upload_one(cover_col, images[0], f"profile_cover_{row_index}.jpg", 1)
         image_start_col = len(PROFILE_COLLECT_BASE_HEADERS) + 1
         for idx, image_bytes in enumerate(images, start=1):
             target_col = col_letter(image_start_col + idx - 1)
@@ -1089,6 +1091,41 @@ class LarkWriter:
 
     # ---------- 整店/账号全采集（v4.5.0 新增）----------
 
+    def _migrate_profile_collect_interaction_columns(
+        self, spreadsheet_token: str, sheet_id: str,
+    ) -> None:
+        """旧全采集表：在「笔记链接」后插入互动四列，避免表头更新后数据错位。"""
+        try:
+            header = self.read_range(spreadsheet_token, sheet_id, "A1:N1")
+        except Exception as e:
+            print(f"⚠️ 整店采集互动列迁移检查失败：{e}")
+            return
+        values = list(header[0] if header else [])
+        if len(values) < 8:
+            return
+        if values[6] != "笔记链接":
+            return
+        if values[7] in ("点赞", "收藏", "评论", "分享"):
+            return
+        if values[7] != "图片数量":
+            return
+        try:
+            self._api(
+                "POST",
+                f"/sheets/v2/spreadsheets/{spreadsheet_token}/dimension_range",
+                json={
+                    "dimension": {
+                        "sheetId": sheet_id,
+                        "majorDimension": "COLUMNS",
+                        "startIndex": 7,
+                        "length": 4,
+                    }
+                },
+            )
+            self.invalidate_cache(spreadsheet_token)
+        except Exception as e:
+            print(f"⚠️ 整店采集互动列迁移失败：{e}")
+
     def profile_collect_sheet_title(self, account_name: str) -> str:
         base = sanitize_sheet_title(account_name or "账号")
         suffix = "全采集"
@@ -1128,6 +1165,9 @@ class LarkWriter:
                                        image_cols: int = 1) -> None:
         """整店采集表模板：标题/文案/标签/图片下载链接。"""
         image_cols = max(1, int(image_cols or 1))
+        self._migrate_profile_collect_interaction_columns(
+            spreadsheet_token, sheet_id,
+        )
         last_col_index = (
             len(PROFILE_COLLECT_BASE_HEADERS) + image_cols +
             len(PROFILE_COLLECT_META_HEADERS)
@@ -1195,9 +1235,13 @@ class LarkWriter:
             5: 420,   # 图文文案
             6: 260,   # 话题标签
             7: 240,   # 笔记链接
-            8: 80,    # 图片数量
-            9: 220,   # 封面图
-            10: 320,  # 全部图片下载链接
+            8: 80,    # 点赞
+            9: 80,    # 收藏
+            10: 80,   # 评论
+            11: 80,   # 分享
+            12: 80,   # 图片数量
+            13: 220,  # 封面图
+            14: 320,  # 全部图片下载链接
         }
         image_start = len(PROFILE_COLLECT_BASE_HEADERS) + 1
         for idx in range(image_start, image_start + image_cols):
@@ -1324,6 +1368,10 @@ class LarkWriter:
             clean_text,
             tags,
             self._url_cell(record.get("post_url", ""), "打开笔记"),
+            record.get("liked_count", ""),
+            record.get("collected_count", ""),
+            record.get("comments_count", ""),
+            record.get("shared_count", ""),
             len(image_urls),
             self._url_cell(cover_url, "封面"),
             "  ".join(image_urls),
@@ -1352,6 +1400,10 @@ class LarkWriter:
             f"失败原因：{error[:300]}",
             "",
             self._url_cell(post_url, "打开笔记"),
+            "",
+            "",
+            "",
+            "",
             0,
             "",
             "",

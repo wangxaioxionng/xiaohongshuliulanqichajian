@@ -2345,7 +2345,7 @@ async function handleProfileCollect() {
 
   const ok = await showModal({
     title: "采集这个账号图文？",
-    desc: `会先慢速提取完整笔记链接，再逐篇调用 API，最多采集前 ${PROFILE_COLLECT_LIMIT} 篇图文，包含标题、文案、话题标签和图片链接。`,
+    desc: `会先慢速提取完整笔记链接，再逐篇调用 API，最多采集前 ${PROFILE_COLLECT_LIMIT} 篇图文，包含标题、文案、话题标签、点赞、收藏、评论、分享和图片链接。`,
     mode: "confirm",
     confirmText: "开始采集",
     cancelText: "取消",

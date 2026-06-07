@@ -78,7 +78,7 @@ writer = LarkWriter(
 )
 
 # ---------- FastAPI ----------
-app = FastAPI(title="xhs-collect API", version="4.8.5")
+app = FastAPI(title="xhs-collect API", version="4.8.6")
 
 # CORS：v4 加 Authorization header（JWT 用）
 app.add_middleware(
@@ -832,6 +832,10 @@ def _note_response_to_record(data: dict, note_url: str, profile_url: str,
         "text": text,
         "post_url": note_url,
         "created_at": _format_profile_created_at(data.get("created_at", "")),
+        "liked_count": data.get("liked_count") or data.get("liked") or 0,
+        "collected_count": data.get("collected_count") or data.get("collected") or 0,
+        "comments_count": data.get("comments_count") or data.get("comment") or 0,
+        "shared_count": data.get("shared_count") or data.get("share") or 0,
         "image_urls": image_urls,
         "image_items": image_items,
     }

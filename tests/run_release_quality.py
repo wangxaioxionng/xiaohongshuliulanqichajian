@@ -26,6 +26,7 @@ CHECKS = [
     ("主页采集 Rnote API 后端", ["python3", "tests/verify_rnote_profile_collect_backend.py"]),
     ("主页批量接口后端", ["python3", "tests/verify_profile_collect_playlist_backend.py"]),
     ("主页采集图片嵌入", ["python3", "tests/verify_profile_collect_image_embedding.py"]),
+    ("主页采集互动字段写表", ["python3", "tests/verify_profile_collect_interaction_columns.py"]),
     ("店铺商品与评论原型", ["python3", "tests/verify_shop_comments_prototype.py"]),
     ("店铺商品写表后端", ["python3", "tests/verify_shop_products_sheet_backend.py"]),
     ("popup 脚本语法", ["node", "--check", "extension/popup.js"]),
