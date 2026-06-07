@@ -78,7 +78,7 @@ writer = LarkWriter(
 )
 
 # ---------- FastAPI ----------
-app = FastAPI(title="xhs-collect API", version="4.8.1")
+app = FastAPI(title="xhs-collect API", version="4.8.3")
 
 # CORS：v4 加 Authorization header（JWT 用）
 app.add_middleware(
@@ -114,6 +114,7 @@ class BatchRequest(BaseModel):
 class ProfileCollectRequest(BaseModel):
     profile_url: str
     account_name: Optional[str] = ""
+    note: Optional[str] = ""
     note_urls: Optional[list] = None
     max_items: Optional[int] = None
     source: Optional[str] = "账号全采集"
@@ -1330,8 +1331,6 @@ class AccountLibAddRequest(BaseModel):
     likes_count: Optional[str] = ""
     ip_location: Optional[str] = ""
     bio: Optional[str] = ""
-    categories: Optional[list] = []  # 品类多选
-    styles: Optional[list] = []      # 风格多选
     note: Optional[str] = ""         # 备注（用户手填）
 
 
@@ -1370,22 +1369,6 @@ def account_lib_add(req: AccountLibAddRequest,
         raise HTTPException(status_code=400,
                             detail="主页 URL 必须以 http:// 或 https:// 开头")
 
-    # 校验 categories / styles 在预设范围内（或为空）
-    bad_cat = [c for c in (req.categories or [])
-               if c not in writer.ACCOUNT_LIB_CATEGORIES]
-    if bad_cat:
-        raise HTTPException(
-            status_code=400,
-            detail=f"品类非法 {bad_cat}，可选值：{writer.ACCOUNT_LIB_CATEGORIES}",
-        )
-    bad_style = [s for s in (req.styles or [])
-                 if s not in writer.ACCOUNT_LIB_STYLES]
-    if bad_style:
-        raise HTTPException(
-            status_code=400,
-            detail=f"风格非法 {bad_style}，可选值：{writer.ACCOUNT_LIB_STYLES}",
-        )
-
     token = user["spreadsheet_token"]
 
     try:
@@ -1413,8 +1396,6 @@ def account_lib_add(req: AccountLibAddRequest,
                 "likes_count": req.likes_count or "",
                 "ip_location": req.ip_location or "",
                 "bio": req.bio or "",
-                "categories": req.categories or [],
-                "styles": req.styles or [],
                 "note": req.note or "",
             },
         )
@@ -1435,8 +1416,6 @@ def account_lib_meta():
     """返回扩展前端表单需要的预设值（让前端不用硬编码 = 同步一处改）。"""
     return {
         "account_types": list(writer.ACCOUNT_LIB_SHEETS),
-        "categories": list(writer.ACCOUNT_LIB_CATEGORIES),
-        "styles": list(writer.ACCOUNT_LIB_STYLES),
     }
 
 
@@ -1463,6 +1442,7 @@ def profile_collect(req: ProfileCollectRequest,
     account_name = (req.account_name or "").strip()
     if not account_name:
         account_name = "小红书账号"
+    note = (req.note or "").strip()
     note_urls = _dedupe_note_urls(req.note_urls or [], max_items)
     api_ready_note_urls = [
         url for url in note_urls
@@ -1486,6 +1466,7 @@ def profile_collect(req: ProfileCollectRequest,
             ),
             "collect_mode": "single_post" if use_single_post_api else "playlist",
             "account_name": account_name,
+            "note": note,
             "profile_url": profile_url,
             "total": len(api_ready_note_urls) if use_single_post_api else max_items,
             "processed": 0,

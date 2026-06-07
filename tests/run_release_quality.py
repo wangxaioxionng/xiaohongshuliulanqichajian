@@ -11,6 +11,8 @@ CHECKS = [
     ("当前标签页识别", ["python3", "tests/verify_current_tab_fallback.py"]),
     ("账号主页文本兜底", ["python3", "tests/verify_profile_account_text_fallback.py"]),
     ("账号主页状态兜底", ["python3", "tests/verify_profile_account_initial_state.py"]),
+    ("账号主页备注入口", ["python3", "tests/verify_profile_account_note_input.py"]),
+    ("账号库去品类风格", ["python3", "tests/verify_account_lib_without_category_style.py"]),
     ("账号统计解析", ["python3", "tests/verify_profile_account_stats_parser.py"]),
     ("笔记浮层识别", ["python3", "tests/verify_single_note_modal_detection.py"]),
     ("普通笔记多图写表", ["python3", "tests/verify_single_note_multi_image_backend.py"]),
@@ -30,6 +32,7 @@ CHECKS = [
     ("commerce probe 脚本语法", ["node", "--check", "extension/xhs_commerce_probe.js"]),
     ("manifest JSON", ["python3", "-m", "json.tool", "extension/manifest.json"]),
     ("后台 Python 语法", ["python3", "-m", "py_compile", "server/app.py", "server/lark_writer.py", "server/auth.py", "server/db.py"]),
+    ("后台版本一致", ["python3", "tests/verify_backend_version_matches_manifest.py"]),
 ]
 
 

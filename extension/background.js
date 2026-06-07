@@ -1270,6 +1270,7 @@ async function startProfileCollect(payload) {
     phase: "link_scan",
     profile_url: profileUrl,
     account_name: (payload.account_name || "").trim() || "小红书账号",
+    note: (payload.note || "").trim(),
     total_limit: PROFILE_COLLECT_LIMIT,
     found: existingNoteUrls.length,
     checkpoint_saved: existingNoteUrls.length,
@@ -1367,6 +1368,7 @@ async function submitProfileCollectToBackend(options = {}) {
       body: JSON.stringify({
         profile_url: state.profile_url,
         account_name: state.account_name,
+        note: state.note || "",
         note_urls: noteUrls,
         max_items: PROFILE_COLLECT_LIMIT,
         source: "账号全采集",

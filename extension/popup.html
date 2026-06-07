@@ -709,6 +709,19 @@
     .al-card .al-title { font-size:13px; font-weight:600; color:#0C4A6E; margin-bottom:8px }
     .al-card .al-info { font-size:12px; color:var(--gray-700); margin-bottom:10px; line-height:1.8 }
     .al-card .al-info b { color:var(--gray-900) }
+    .al-card-note { margin-bottom:10px; }
+    .al-card-note label {
+      display:block; margin-bottom:5px; font-size:12px; font-weight:600; color:#0C4A6E;
+    }
+    .al-card-note textarea {
+      width:100%; min-height:58px; resize:vertical; box-sizing:border-box;
+      border:1px solid #BAE6FD; border-radius:6px; padding:8px 10px;
+      font-size:12px; line-height:1.45; color:var(--gray-800); background:#fff;
+      outline:none;
+    }
+    .al-card-note textarea:focus {
+      border-color:var(--brand); box-shadow:0 0 0 2px rgba(255,36,76,0.08);
+    }
     .al-actions { display:flex; gap:8px; }
     .al-actions .btn { height:36px; padding:0 10px; font-size:12px; }
     .al-actions .btn-secondary { flex:1; background:#fff; color:#0C4A6E; border:1px solid #BAE6FD; }
@@ -844,6 +857,10 @@
         粉丝数：<span id="al-detected-fans">-</span> ·
         获赞收藏：<span id="al-detected-likes">-</span> ·
         笔记数：<span id="al-detected-notes">-</span>
+      </div>
+      <div class="al-card-note">
+        <label for="profile-note-input">备注（可选）</label>
+        <textarea id="profile-note-input" rows="2" placeholder="例如：封面风格值得学 / 适合重点观察 / 后续对标选题"></textarea>
       </div>
       <div class="al-actions">
         <button id="btn-open-al-modal" class="btn btn-primary">+ 加入对标账号库</button>
@@ -1032,16 +1049,6 @@
         <div class="al-field">
           <label>简介</label>
           <textarea id="al-bio-input" rows="2"></textarea>
-        </div>
-
-        <div class="al-field">
-          <label>品类（多选）</label>
-          <div class="al-tag-group" id="al-cat-group"></div>
-        </div>
-
-        <div class="al-field">
-          <label>风格（多选）</label>
-          <div class="al-tag-group" id="al-style-group"></div>
         </div>
       </div>
       <div class="al-result" id="al-result"></div>

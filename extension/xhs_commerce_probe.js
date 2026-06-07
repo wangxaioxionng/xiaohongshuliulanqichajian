@@ -112,7 +112,23 @@
   function extractShopInfoFromGoodsPayload(payload) {
     const data = unwrapData(payload);
     const item = firstPayloadItem(payload);
-    const shop = asObject(firstNonEmpty(data.shop, data.seller, item.shop, item.seller, data.store, item.store));
+    const templateData = asObject(asArray(data.template_data)[0]);
+    const sellerH5 = asObject(templateData.sellerH5);
+    const bottomBarMain = asObject(templateData.bottomBarMainH5);
+    const bottomSeller = asObject(bottomBarMain.seller);
+    const graphicDetails = asObject(templateData.graphicDetailsV4);
+    const headerBarMain = asObject(templateData.headerBarMainV2);
+    const profitBarFollow = asObject(asObject(templateData.profitBarPopupH5).follow);
+    const shop = asObject(firstNonEmpty(
+      data.shop,
+      data.seller,
+      item.shop,
+      item.seller,
+      data.store,
+      item.store,
+      sellerH5,
+      bottomSeller,
+    ));
     const sellerId = String(firstNonEmpty(
       shop.seller_id,
       shop.sellerId,
@@ -122,17 +138,46 @@
       data.sellerId,
       item.seller_id,
       item.sellerId,
+      sellerH5.id,
+      sellerH5.sellerId,
+      bottomSeller.sellerId,
+      bottomSeller.id,
+      graphicDetails.sellerId,
+      headerBarMain.sellerId,
+      profitBarFollow.sellerId,
     ) || "").trim();
 
     return {
       sellerId,
-      shopName: cleanText(firstNonEmpty(shop.shopName, shop.shop_name, shop.name, shop.nickname, data.shopName)),
-      shopLogo: String(firstNonEmpty(shop.shopLogo, shop.shop_logo, shop.logo, shop.avatar, shop.image) || ""),
-      shopGrade: String(firstNonEmpty(shop.shopGrade, shop.shop_grade, shop.grade, shop.level) || ""),
-      sellerScore: String(firstNonEmpty(shop.sellerScore, shop.seller_score, shop.score) || ""),
-      fansAmount: String(firstNonEmpty(shop.fansAmount, shop.fans_amount, shop.fans, shop.follower_count) || ""),
-      salesVolume: String(firstNonEmpty(shop.salesVolume, shop.sales_volume, shop.sales, shop.sold_count) || ""),
-      shopLink: sellerId ? `https://www.xiaohongshu.com/vendor/${sellerId}` : "",
+      shopName: cleanText(firstNonEmpty(
+        sellerH5.name,
+        shop.shopName,
+        shop.shop_name,
+        shop.name,
+        shop.nickname,
+        bottomSeller.name,
+        data.shopName,
+      )),
+      shopLogo: String(firstNonEmpty(
+        sellerH5.logo,
+        bottomSeller.logo,
+        shop.shopLogo,
+        shop.shop_logo,
+        shop.logo,
+        shop.avatar,
+        shop.image,
+      ) || ""),
+      shopGrade: String(firstNonEmpty(sellerH5.grade, shop.shopGrade, shop.shop_grade, shop.grade, shop.level) || ""),
+      sellerScore: String(firstNonEmpty(sellerH5.sellerScore, sellerH5.seller_score, shop.sellerScore, shop.seller_score, shop.score) || ""),
+      fansAmount: String(firstNonEmpty(sellerH5.fansAmount, sellerH5.fans_amount, shop.fansAmount, shop.fans_amount, shop.fans, shop.follower_count) || ""),
+      salesVolume: String(firstNonEmpty(sellerH5.salesVolume, sellerH5.sales_volume, shop.salesVolume, shop.sales_volume, shop.sales, shop.sold_count) || ""),
+      shopLink: String(firstNonEmpty(
+        sellerH5.link,
+        bottomSeller.link,
+        shop.link,
+        shop.shopLink,
+        sellerId ? `https://www.xiaohongshu.com/vendor/${sellerId}` : "",
+      ) || ""),
     };
   }
 

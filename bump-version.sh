@@ -237,7 +237,9 @@ log_info "复制 extension/ 文件（排除 secrets）..."
 rsync -a \
     --exclude='secrets.js' \
     --exclude='secrets.js.example' \
+    --exclude='.serena' \
     --exclude='.spec-workflow' \
+    --exclude='.DS_Store' \
     "$PROJECT_ROOT/extension/" "$NEW_RELEASE_DIR/extension/"
 
 # 复制使用说明

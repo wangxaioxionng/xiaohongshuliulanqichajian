@@ -2239,12 +2239,10 @@ function renderProfileFailures(failures) {
 const AL_STATE = {
   cfg: null,
   tabId: null,
-  meta: null,            // {account_types, categories, styles}
+  meta: null,            // {account_types}
   scrapedData: null,     // 抓到的账号字段
   resolvedNoteUrl: "",   // 当前页里实际打开的笔记链接（兼容主页/搜索页弹出的笔记浮层）
   selectedType: "",      // 当前选中的账号类型
-  selectedCategories: [],
-  selectedStyles: [],
 };
 
 function hasUsefulAccountInfo(data) {
@@ -2299,8 +2297,6 @@ async function initAccountLibForCurrentPage(tab, cfg) {
     console.warn("拉 meta 失败：", e);
     AL_STATE.meta = {
       account_types: ["潜力店铺", "爆款跟品"],
-      categories: ["饰品", "穿搭", "美妆", "生活", "美食", "母婴", "数码", "家居"],
-      styles: ["大字报", "真人种草", "攻略型", "带货", "测评", "干货", "故事型"],
     };
   }
 
@@ -2329,6 +2325,11 @@ async function initAccountLibForCurrentPage(tab, cfg) {
   const collectBtn = document.getElementById("btn-profile-collect");
   if (collectBtn) collectBtn.onclick = handleProfileCollect;
   restoreProfileCollectStateForCurrentPage(cfg);
+}
+
+function getProfileAccountNote() {
+  const el = document.getElementById("profile-note-input");
+  return el ? el.value.trim() : "";
 }
 
 async function handleProfileCollect() {
@@ -2374,6 +2375,7 @@ async function handleProfileCollect() {
         tab_id: AL_STATE.tabId,
         profile_url: profileUrl,
         account_name: accountName,
+        note: getProfileAccountNote(),
       },
     });
     if (!resp || !resp.ok) {
@@ -2423,46 +2425,6 @@ function openAccountLibModal() {
     typeGroup.appendChild(btn);
   });
 
-  // 渲染品类多选
-  const catGroup = document.getElementById("al-cat-group");
-  catGroup.innerHTML = "";
-  AL_STATE.selectedCategories = [];
-  meta.categories.forEach((c) => {
-    const tag = document.createElement("div");
-    tag.className = "al-tag";
-    tag.textContent = c;
-    tag.onclick = () => {
-      tag.classList.toggle("active");
-      if (tag.classList.contains("active")) {
-        AL_STATE.selectedCategories.push(c);
-      } else {
-        AL_STATE.selectedCategories =
-          AL_STATE.selectedCategories.filter((x) => x !== c);
-      }
-    };
-    catGroup.appendChild(tag);
-  });
-
-  // 渲染风格多选
-  const styleGroup = document.getElementById("al-style-group");
-  styleGroup.innerHTML = "";
-  AL_STATE.selectedStyles = [];
-  meta.styles.forEach((s) => {
-    const tag = document.createElement("div");
-    tag.className = "al-tag";
-    tag.textContent = s;
-    tag.onclick = () => {
-      tag.classList.toggle("active");
-      if (tag.classList.contains("active")) {
-        AL_STATE.selectedStyles.push(s);
-      } else {
-        AL_STATE.selectedStyles =
-          AL_STATE.selectedStyles.filter((x) => x !== s);
-      }
-    };
-    styleGroup.appendChild(tag);
-  });
-
   // 填抓到的字段到表单
   document.getElementById("al-name-input").value = data.account_name || "";
   document.getElementById("al-xhsid-input").value = data.xhs_id || "";
@@ -2471,7 +2433,7 @@ function openAccountLibModal() {
   document.getElementById("al-fans-input").value = data.fans_count || "";
   document.getElementById("al-likes-input").value = data.likes_count || "";
   document.getElementById("al-bio-input").value = data.bio || "";
-  document.getElementById("al-note-input").value = "";
+  document.getElementById("al-note-input").value = getProfileAccountNote();
   // 隐藏 result
   const resEl = document.getElementById("al-result");
   resEl.style.display = "none";
@@ -2529,8 +2491,6 @@ async function submitAccountLib() {
       likes_count: document.getElementById("al-likes-input").value.trim(),
       ip_location: document.getElementById("al-ip-input").value.trim(),
       bio: document.getElementById("al-bio-input").value.trim(),
-      categories: AL_STATE.selectedCategories,
-      styles: AL_STATE.selectedStyles,
       note: document.getElementById("al-note-input").value.trim(),
     };
 

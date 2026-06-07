@@ -171,6 +171,40 @@ if (shop.sellerId !== "seller123" || shop.shopName !== "小熊耳饰") {{
   throw new Error(`bad shop info: ${{JSON.stringify(shop)}}`);
 }}
 
+const templateDataShopPayload = {{
+  success: true,
+  data: {{
+    template_data: [{{
+      sellerH5: {{
+        id: "690b0740610d320015808ee3",
+        name: "公主日记🎀的店",
+        logo: "https://img.example/shop-logo.jpg",
+        grade: "4.5",
+        sellerScore: "4.55",
+        fansAmount: "粉丝数 481",
+        salesVolume: "已售2062",
+        link: "https://www.xiaohongshu.com/shop/690b0740610d320015808ee3"
+      }},
+      bottomBarMainH5: {{
+        seller: {{
+          sellerId: "690b0740610d320015808ee3",
+          link: "https://www.xiaohongshu.com/shop/690b0740610d320015808ee3"
+        }}
+      }},
+      graphicDetailsV4: {{
+        sellerId: "690b0740610d320015808ee3"
+      }},
+      headerBarMainV2: {{
+        sellerId: "690b0740610d320015808ee3"
+      }}
+    }}]
+  }}
+}};
+const templateShop = probe.extractShopInfoFromGoodsPayload(templateDataShopPayload);
+if (templateShop.sellerId !== "690b0740610d320015808ee3" || templateShop.shopName !== "公主日记🎀的店") {{
+  throw new Error(`bad template_data shop info: ${{JSON.stringify(templateShop)}}`);
+}}
+
 const skuPayload = {{
   data: {{
     skus: [

@@ -1989,15 +1989,10 @@ class LarkWriter:
     ACCOUNT_LIB_SHEETS = ("潜力店铺", "爆款跟品")
     ACCOUNT_LIB_HEADERS = [
         "序号", "账号名", "主页URL", "小红书号", "笔记数", "粉丝数",
-        "获赞与收藏", "IP属地", "简介", "品类", "风格", "备注",
-        "添加时间", "状态",
+        "获赞与收藏", "IP属地", "简介", "备注", "添加时间", "状态",
     ]
-    ACCOUNT_LIB_CATEGORIES = ["饰品", "穿搭", "美妆", "生活", "美食",
-                              "母婴", "数码", "家居"]
-    ACCOUNT_LIB_STYLES = ["大字报", "真人种草", "攻略型", "带货",
-                          "测评", "干货", "故事型"]
     ACCOUNT_LIB_STATUSES = ["活跃", "暂停", "黑名单"]
-    ACCOUNT_LIB_LAST_COL = "N"  # 14 列
+    ACCOUNT_LIB_LAST_COL = "L"  # 12 列
 
     @staticmethod
     def _normalize_profile_url(url: str) -> str:
@@ -2055,9 +2050,9 @@ class LarkWriter:
         - 表头 #1F4E79 深蓝底 / #FFFFFF 白字 / 14pt / 加粗 / 居中
         - 数据行 11pt / 偶数行 #F3F6FB 淡蓝灰 / 全边框 #D1D5DB
         - 表头行高 40 / 数据行高 36（紧凑）
-        - J 列品类多选 / K 列风格多选 / N 列状态单选
+        - L 列状态单选
         """
-        last_col = self.ACCOUNT_LIB_LAST_COL  # "N"
+        last_col = self.ACCOUNT_LIB_LAST_COL  # "L"
 
         # 1. 写表头
         try:
@@ -2100,8 +2095,7 @@ class LarkWriter:
         # 5. 列宽（按内容分级）
         col_widths = {
             "A": 60, "B": 140, "C": 200, "D": 120, "E": 80, "F": 80,
-            "G": 100, "H": 100, "I": 260, "J": 110, "K": 140, "L": 260,
-            "M": 110, "N": 90,
+            "G": 100, "H": 100, "I": 260, "J": 260, "K": 110, "L": 90,
         }
         for col, width in col_widths.items():
             col_idx = ord(col) - ord("A")
@@ -2150,59 +2144,13 @@ class LarkWriter:
         except Exception:
             pass
 
-        # 8. J 列品类下拉（多选）
+        # 8. L 列状态下拉（单选）
         try:
             self._api(
                 "POST",
                 f"/sheets/v2/spreadsheets/{spreadsheet_token}/dataValidation",
                 json={
-                    "range": f"{sheet_id}!J2:J200",
-                    "dataValidationType": "list",
-                    "dataValidation": {
-                        "conditionValues": self.ACCOUNT_LIB_CATEGORIES,
-                        "options": {
-                            "multipleValues": True,
-                            "highlightValidData": True,
-                            "colors": ["#FA8C16", "#1890FF", "#EB2F96",
-                                       "#52C41A", "#FAAD14", "#13C2C2",
-                                       "#722ED1", "#A0522D"],
-                        },
-                    },
-                },
-            )
-        except Exception as e:
-            print(f"⚠️ 账号库 J 列品类下拉失败：{e}")
-
-        # 9. K 列风格下拉（多选）
-        try:
-            self._api(
-                "POST",
-                f"/sheets/v2/spreadsheets/{spreadsheet_token}/dataValidation",
-                json={
-                    "range": f"{sheet_id}!K2:K200",
-                    "dataValidationType": "list",
-                    "dataValidation": {
-                        "conditionValues": self.ACCOUNT_LIB_STYLES,
-                        "options": {
-                            "multipleValues": True,
-                            "highlightValidData": True,
-                            "colors": ["#FF4D4F", "#52C41A", "#1890FF",
-                                       "#FA8C16", "#722ED1", "#13C2C2",
-                                       "#EB2F96"],
-                        },
-                    },
-                },
-            )
-        except Exception as e:
-            print(f"⚠️ 账号库 K 列风格下拉失败：{e}")
-
-        # 10. N 列状态下拉（单选）
-        try:
-            self._api(
-                "POST",
-                f"/sheets/v2/spreadsheets/{spreadsheet_token}/dataValidation",
-                json={
-                    "range": f"{sheet_id}!N2:N200",
+                    "range": f"{sheet_id}!L2:L200",
                     "dataValidationType": "list",
                     "dataValidation": {
                         "conditionValues": self.ACCOUNT_LIB_STATUSES,
@@ -2259,8 +2207,7 @@ class LarkWriter:
                                data: dict) -> int:
         """往指定账号库 sheet 追加一行。返回 row_index。
         data 字段：account_name / profile_url / xhs_id / notes_count /
-                  fans_count / likes_count / ip_location / bio /
-                  categories(list) / styles(list) / note
+                  fans_count / likes_count / ip_location / bio / note
         """
         if sheet_title not in self.ACCOUNT_LIB_SHEETS:
             raise ValueError(f"sheet_title 必须是 {self.ACCOUNT_LIB_SHEETS}")
@@ -2296,18 +2243,6 @@ class LarkWriter:
             if profile_url else ""
         )
 
-        # 多选下拉值：用 multipleValue 格式让 chip 样式生效
-        categories = data.get("categories") or []
-        styles = data.get("styles") or []
-        category_cell = (
-            {"type": "multipleValue", "values": list(categories)}
-            if categories else ""
-        )
-        style_cell = (
-            {"type": "multipleValue", "values": list(styles)}
-            if styles else ""
-        )
-
         new_row = [
             new_seq,
             (data.get("account_name") or "").strip(),
@@ -2318,8 +2253,6 @@ class LarkWriter:
             (data.get("likes_count") or "").strip(),
             (data.get("ip_location") or "").strip(),
             (data.get("bio") or "").strip(),
-            category_cell,
-            style_cell,
             (data.get("note") or "").strip(),
             time.strftime("%Y-%m-%d"),
             "活跃",
