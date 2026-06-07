@@ -5,6 +5,13 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.8.4] - 2026-06-07
+
+### 变更
+- 账号全采集新增 Rnote API provider，可通过服务端配置切换新旧 API
+- Rnote 路线会先获取账号笔记列表，再逐篇调用图文详情接口，保留失败落表和自动补采
+- Rnote API Key 只放服务端 config.json，不写入浏览器插件安装包
+
 ## [4.8.3] - 2026-06-07
 
 ### 变更

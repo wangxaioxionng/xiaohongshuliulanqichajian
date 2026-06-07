@@ -78,7 +78,7 @@ writer = LarkWriter(
 )
 
 # ---------- FastAPI ----------
-app = FastAPI(title="xhs-collect API", version="4.8.3")
+app = FastAPI(title="xhs-collect API", version="4.8.4")
 
 # CORS：v4 加 Authorization header（JWT 用）
 app.add_middleware(
@@ -137,6 +137,11 @@ MEOWLOAD_POST_API_URL = CONFIG.get(
     "meowload_post_api_url",
     "https://api.meowload.net/openapi/extract/post",
 )
+PROFILE_COLLECT_API_PROVIDER = (
+    CONFIG.get("profile_collect_api_provider") or
+    ("rnote" if CONFIG.get("rnote_api_key") else "meowload")
+).strip().lower()
+RNOTE_API_BASE = CONFIG.get("rnote_api_base", "https://rnote.dev").rstrip("/")
 PROFILE_COLLECT_MAX_ITEMS = int(CONFIG.get("profile_collect_max_items", 400))
 PROFILE_COLLECT_REQUEST_DELAY = float(CONFIG.get("profile_collect_delay", 2.5))
 PROFILE_COLLECT_POST_RETRY_ATTEMPTS = max(
@@ -272,6 +277,30 @@ def _get_meowload_api_key() -> str:
     return key
 
 
+def _get_rnote_api_key() -> str:
+    key = (
+        CONFIG.get("rnote_api_key") or
+        CONFIG.get("profile_collect_api_key") or
+        ""
+    ).strip()
+    if not key:
+        raise HTTPException(
+            status_code=500,
+            detail="服务器未配置 Rnote API key：请在 config.json 增加 rnote_api_key",
+        )
+    return key
+
+
+def _profile_collect_provider() -> str:
+    provider = (PROFILE_COLLECT_API_PROVIDER or "meowload").strip().lower()
+    if provider not in ("meowload", "rnote"):
+        raise HTTPException(
+            status_code=500,
+            detail=f"不支持的整店采集 API provider：{provider}",
+        )
+    return provider
+
+
 def _validate_xhs_profile_url(url: str) -> str:
     url = (url or "").strip()
     try:
@@ -286,6 +315,17 @@ def _validate_xhs_profile_url(url: str) -> str:
     if not parsed.path.startswith("/user/profile/"):
         raise HTTPException(status_code=400, detail="请打开小红书账号主页后再采集")
     return url
+
+
+def _extract_xhs_profile_user_id(profile_url: str) -> str:
+    try:
+        path = urllib.parse.urlparse(profile_url).path.strip("/")
+    except Exception:
+        return ""
+    parts = path.split("/")
+    if len(parts) >= 3 and parts[0] == "user" and parts[1] == "profile":
+        return parts[2].strip()
+    return ""
 
 
 def _validate_xhs_note_url(url: str) -> str:
@@ -396,6 +436,135 @@ def _profile_media_urls(medias: list) -> list:
     return [item["url"] for item in _profile_media_items(medias)]
 
 
+def _rnote_image_url(image: dict) -> str:
+    if not isinstance(image, dict):
+        return ""
+    for key in ("url", "original", "url_size_large", "origin_img"):
+        value = image.get(key)
+        if isinstance(value, str) and value.startswith("http"):
+            return value
+    levels = image.get("url_multi_level")
+    if isinstance(levels, dict):
+        for value in levels.values():
+            if isinstance(value, str) and value.startswith("http"):
+                return value
+    if isinstance(levels, list):
+        for item in levels:
+            if isinstance(item, str) and item.startswith("http"):
+                return item
+            if isinstance(item, dict):
+                url = _rnote_image_url(item)
+                if url:
+                    return url
+    return ""
+
+
+def _rnote_images_to_medias(images: list) -> list:
+    medias = []
+    seen = set()
+    for image in images or []:
+        url = _rnote_image_url(image)
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        medias.append({
+            "media_type": "image",
+            "resource_url": url,
+            "preview_url": url,
+        })
+    return medias
+
+
+def _rnote_unwrap_response(data: dict, label: str):
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Rnote {label} API 返回格式异常")
+    if data.get("success") is False:
+        msg = data.get("error") or data.get("message") or str(data)[:200]
+        raise RuntimeError(f"Rnote {label} API 失败：{msg}")
+    inner = data.get("data")
+    if isinstance(inner, dict):
+        if inner.get("success") is False or inner.get("code") not in (None, 0):
+            msg = inner.get("msg") or inner.get("message") or str(inner)[:200]
+            raise RuntimeError(f"Rnote {label} API 失败：{msg}")
+        if "data" in inner:
+            return inner.get("data")
+    return inner
+
+
+def _rnote_get(path: str, params: dict, label: str):
+    api_key = _get_rnote_api_key()
+    url = f"{RNOTE_API_BASE}{path}"
+    headers = {
+        "X-API-Key": api_key,
+        "accept": "application/json",
+    }
+    try:
+        resp = requests.get(
+            url,
+            params=params,
+            headers=headers,
+            timeout=45,
+        )
+    except requests.RequestException as e:
+        raise RuntimeError(f"Rnote {label} API 请求失败：{e}") from e
+    try:
+        data = resp.json()
+    except Exception as e:
+        raise RuntimeError(
+            f"Rnote {label} API 返回非 JSON：HTTP {resp.status_code}"
+        ) from e
+    if resp.status_code != 200:
+        msg = data.get("error") or data.get("message") or data.get("detail")
+        if not msg:
+            msg = str(data)[:200]
+        raise RuntimeError(f"Rnote {label} API 失败：{msg}")
+    return _rnote_unwrap_response(data, label)
+
+
+def _rnote_profile_note_to_post(note: dict) -> dict:
+    note_id = str(note.get("id") or note.get("note_id") or "").strip()
+    medias = _rnote_images_to_medias(note.get("images_list") or [])
+    return {
+        "id": note_id,
+        "title": note.get("title") or note.get("display_title") or note_id,
+        "text": note.get("desc") or note.get("content") or "",
+        "post_url": f"https://www.xiaohongshu.com/explore/{note_id}" if note_id else "",
+        "created_at": note.get("create_time") or note.get("created_time") or note.get("time") or "",
+        "medias": medias,
+        "liked_count": note.get("liked_count") or note.get("likes"),
+        "collected_count": note.get("collected_count"),
+        "comments_count": note.get("comments_count"),
+        "shared_count": note.get("shared_count"),
+    }
+
+
+def _rnote_note_detail_to_post(detail) -> dict:
+    entry = None
+    if isinstance(detail, list) and detail:
+        entry = detail[0]
+    elif isinstance(detail, dict):
+        entry = detail
+    if not isinstance(entry, dict):
+        raise RuntimeError("Rnote 图文详情 API data 字段异常")
+
+    note = None
+    note_list = entry.get("note_list") or []
+    if note_list and isinstance(note_list[0], dict):
+        note = note_list[0]
+    elif isinstance(entry.get("note"), dict):
+        note = entry["note"]
+    elif entry.get("id") and (
+        entry.get("title") or entry.get("content") or entry.get("desc") or entry.get("images_list")
+    ):
+        note = entry
+
+    if not isinstance(note, dict):
+        raise RuntimeError("Rnote 图文详情 API 未找到笔记详情字段")
+    post = _rnote_profile_note_to_post(note)
+    post["created_at"] = note.get("time") or note.get("create_time") or note.get("created_time") or ""
+    return post
+
+
 def _attach_profile_image_bytes(records: list, image_cols: int) -> dict:
     """Download images for profile collect rows before embedding into Feishu."""
     if not PROFILE_COLLECT_EMBED_IMAGES:
@@ -417,6 +586,9 @@ def _attach_profile_image_bytes(records: list, image_cols: int) -> dict:
 
 
 def _fetch_profile_posts(profile_url: str, max_items: int) -> tuple:
+    if _profile_collect_provider() == "rnote":
+        return _fetch_rnote_profile_posts(profile_url, max_items)
+
     api_key = _get_meowload_api_key()
     cursor = None
     page = 1
@@ -484,6 +656,58 @@ def _fetch_profile_posts(profile_url: str, max_items: int) -> tuple:
     return posts, user_info, more_available
 
 
+def _fetch_rnote_profile_posts(profile_url: str, max_items: int) -> tuple:
+    user_id = _extract_xhs_profile_user_id(profile_url)
+    if not user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Rnote 需要账号主页里的用户 ID，请打开小红书账号主页后再采集",
+        )
+    cursor = ""
+    posts = []
+    more_available = False
+    page_size = min(40, max(1, max_items))
+
+    while len(posts) < max_items:
+        payload = _rnote_get(
+            "/api/v2/crawler/user/posted",
+            {
+                "user_id": user_id,
+                "cursor": cursor,
+                "num": page_size,
+            },
+            "用户笔记列表",
+        )
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=502, detail="Rnote 用户笔记列表字段异常")
+        notes = payload.get("notes") or []
+        if not isinstance(notes, list):
+            raise HTTPException(status_code=502, detail="Rnote notes 字段异常")
+        for note in notes:
+            if len(posts) >= max_items:
+                break
+            if isinstance(note, dict):
+                posts.append(_rnote_profile_note_to_post(note))
+
+        more_available = bool(payload.get("has_more"))
+        if len(posts) >= max_items or not more_available:
+            break
+        next_cursor = ""
+        for note in reversed(notes):
+            if isinstance(note, dict):
+                next_cursor = str(note.get("cursor") or note.get("id") or "").strip()
+                if next_cursor:
+                    break
+        if not next_cursor or next_cursor == cursor:
+            more_available = False
+            break
+        cursor = next_cursor
+        if PROFILE_COLLECT_REQUEST_DELAY > 0:
+            time.sleep(PROFILE_COLLECT_REQUEST_DELAY)
+
+    return posts, {}, more_available
+
+
 def _profile_posts_to_records(posts: list, profile_url: str,
                               account_name: str) -> list:
     records = []
@@ -506,6 +730,9 @@ def _profile_posts_to_records(posts: list, profile_url: str,
 
 
 def _fetch_note_post(note_url: str) -> dict:
+    if _profile_collect_provider() == "rnote":
+        return _fetch_rnote_note_post(note_url)
+
     api_key = _get_meowload_api_key()
     headers = {
         "Content-Type": "application/json",
@@ -531,6 +758,18 @@ def _fetch_note_post(note_url: str) -> dict:
         msg = data.get("message") or data.get("detail") or str(data)[:200]
         raise RuntimeError(f"哼哼猫单篇 API 失败：{msg}")
     return data
+
+
+def _fetch_rnote_note_post(note_url: str) -> dict:
+    note_id = _xhs_note_id(note_url)
+    if not note_id:
+        raise RuntimeError("Rnote 单篇 API 需要笔记 ID，请确认链接是否为小红书笔记详情页")
+    payload = _rnote_get(
+        "/api/v2/crawler/note/image",
+        {"note_id": note_id},
+        "图文详情",
+    )
+    return _rnote_note_detail_to_post(payload)
 
 
 def _is_non_retryable_meowload_error(error: Exception) -> bool:
@@ -960,6 +1199,56 @@ def _run_profile_collect_playlist_task(task_id: str, spreadsheet_token: str,
         total=max_items,
     )
     try:
+        if _profile_collect_provider() == "rnote":
+            posts, user_info, more_available = _fetch_profile_posts(
+                profile_url,
+                max_items,
+            )
+            resolved_account_name = (
+                account_name or
+                (user_info or {}).get("username") or
+                (user_info or {}).get("nickname") or
+                "小红书账号"
+            )
+            note_urls = [
+                post.get("post_url")
+                for post in posts
+                if isinstance(post, dict) and post.get("post_url")
+            ]
+            _task_update(
+                task_id,
+                collect_mode="rnote_user_posted_then_detail",
+                total=len(note_urls),
+                processed=0,
+                success=0,
+                failed=0,
+                more_available=more_available,
+                message=(
+                    f"Rnote 已返回 {len(note_urls)} 条笔记，"
+                    "正在逐篇提取图文详情"
+                ),
+            )
+            if not note_urls:
+                _task_update(
+                    task_id,
+                    status="failed",
+                    phase="failed",
+                    error="Rnote 用户笔记列表没有返回可采集笔记",
+                    message="Rnote 用户笔记列表没有返回可采集笔记，未创建飞书表",
+                    finished_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                )
+                return
+            _run_profile_collect_task(
+                task_id,
+                spreadsheet_token,
+                profile_url,
+                resolved_account_name,
+                note_urls,
+                source,
+            )
+            _task_update(task_id, more_available=more_available)
+            return
+
         posts, user_info, more_available = _fetch_profile_posts(
             profile_url,
             max_items,
@@ -1448,7 +1737,14 @@ def profile_collect(req: ProfileCollectRequest,
         url for url in note_urls
         if "xsec_token=" in url
     ]
+    provider = _profile_collect_provider()
     use_single_post_api = bool(api_ready_note_urls)
+    collect_mode = (
+        "single_post"
+        if use_single_post_api else
+        "rnote_user_posted_then_detail" if provider == "rnote" else
+        "playlist"
+    )
 
     task_id = uuid.uuid4().hex
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1462,9 +1758,11 @@ def profile_collect(req: ProfileCollectRequest,
             "message": (
                 "服务器已收到完整笔记链接，等待逐篇调用单篇 API"
                 if use_single_post_api else
+                "服务器将通过 Rnote 先取账号笔记列表，再逐篇提取图文详情"
+                if provider == "rnote" else
                 "服务器未收到完整笔记链接，等待尝试主页批量接口"
             ),
-            "collect_mode": "single_post" if use_single_post_api else "playlist",
+            "collect_mode": collect_mode,
             "account_name": account_name,
             "note": note,
             "profile_url": profile_url,

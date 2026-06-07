@@ -23,6 +23,7 @@ CHECKS = [
     ("主页采集临时失败重试", ["python3", "tests/verify_profile_collect_retry_backend.py"]),
     ("主页采集失败落表补采", ["python3", "tests/verify_profile_collect_failure_backfill_backend.py"]),
     ("主页采集路由模式", ["python3", "tests/verify_profile_collect_route_mode.py"]),
+    ("主页采集 Rnote API 后端", ["python3", "tests/verify_rnote_profile_collect_backend.py"]),
     ("主页批量接口后端", ["python3", "tests/verify_profile_collect_playlist_backend.py"]),
     ("主页采集图片嵌入", ["python3", "tests/verify_profile_collect_image_embedding.py"]),
     ("店铺商品与评论原型", ["python3", "tests/verify_shop_comments_prototype.py"]),
