@@ -985,7 +985,7 @@ class LarkWriter:
 
     def build_row(self, seq: int, data: dict, source: str,
                   note: str = "", tags: list = None) -> list:
-        url = data.get("url", "")
+        note_url = data.get("url", "")
         notes_field = note or ""
         if tags:
             tag_str = " ".join(f"#{t}" for t in tags if t)
@@ -996,13 +996,16 @@ class LarkWriter:
         image_urls = list(data.get("image_urls") or [])
         image_cells = []
         for idx in range(NOTE_MULTI_IMAGE_MAX_COLS):
-            url = image_urls[idx] if idx < len(image_urls) else ""
+            # 注意：这里必须用独立变量名。历史上复用了外层的 url，
+            # 导致 B 列「原文链接」被最后一次循环值覆盖（少于 20 图→空，
+            # 满 20 图→第 20 张图链接）。见 tests 里的 B 列断言。
+            image_url = image_urls[idx] if idx < len(image_urls) else ""
             image_cells.append(
-                self._url_cell(url, f"图片{idx + 1}") if url else ""
+                self._url_cell(image_url, f"图片{idx + 1}") if image_url else ""
             )
         return [
             seq,
-            self._url_cell(url, url),
+            self._url_cell(note_url, note_url),
             "✅ 已采集",
             data.get("title", ""),
             "",  # E 列封面图占位

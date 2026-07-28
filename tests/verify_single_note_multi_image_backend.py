@@ -47,6 +47,14 @@ def main() -> None:
         "Extension",
     )
     assert len(row) == lark_writer.NOTE_TOTAL_COLS
+    # B 列「原文链接」必须是笔记链接，不能被图片循环变量覆盖。
+    # 历史 bug：build_row 循环里复用了 url 变量，导致 B 列被写成
+    # 空值（图片 < 20 张）或第 20 张图片链接（图片 >= 20 张）。
+    assert row[1] == {
+        "type": "url",
+        "text": "https://www.xiaohongshu.com/explore/note1",
+        "link": "https://www.xiaohongshu.com/explore/note1",
+    }, f"B 列原文链接被写错：{row[1]}"
     assert row[14] == "#标签#"
     assert row[15] == 3
     assert row[16] == "  ".join(image_urls)
@@ -66,6 +74,28 @@ def main() -> None:
         "Extension",
     )
     assert empty_url_row[1] == ""
+
+    # 边界：图片数 >= 20（图片列填满）时，B 列仍必须是原文链接。
+    # 这是历史 bug 的第二种表现：B 列会变成第 20 张图片的链接。
+    many_images = [
+        f"https://ci.xiaohongshu.com/full{idx}.jpg" for idx in range(25)
+    ]
+    full_row = writer.build_row(
+        3,
+        {
+            "url": "https://www.xiaohongshu.com/explore/note-full",
+            "note_id": "note-full",
+            "title": "满图笔记",
+            "desc": "正文",
+            "image_urls": many_images,
+        },
+        "Extension",
+    )
+    assert full_row[1]["link"] == "https://www.xiaohongshu.com/explore/note-full", (
+        f"满 20 图时 B 列原文链接被写错：{full_row[1]}"
+    )
+    assert full_row[-1]["link"] == many_images[19]
+    assert full_row[15] == 25
 
     failure_row = writer.build_failure_row(
         2,
