@@ -19,9 +19,19 @@
       --red: #DC2626;
     }
     * { box-sizing: border-box; }
+    html {
+      width: 360px;
+      min-width: 360px;
+      max-width: 360px;
+      overflow-x: hidden;
+      background: #fff;
+    }
     body {
       margin: 0;
       width: 360px;
+      min-width: 360px;
+      max-width: 360px;
+      overflow-x: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
       font-size: 13px;
       color: var(--gray-900);
@@ -315,6 +325,10 @@
     }
     .module-qianfan {
       display: none;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
       border-color: #BFDBFE;
       background: #F8FBFF;
     }
@@ -896,11 +910,11 @@
       <div class="module-head">
         <div>
           <div class="module-kicker">千帆商品笔记</div>
-          <div class="module-title">笔记列表全量显示</div>
+          <div class="module-title">笔记列表宽屏分析</div>
         </div>
       </div>
       <div class="module-copy">
-        把当前已经加载的全部列压缩到同一屏，方便直接横向比较，不修改任何店铺数据。
+        扩展千帆主内容区域，利用浏览器右侧空白显示全部列，保持表头和环比数据可读。
       </div>
       <div class="qianfan-preview" aria-hidden="true">
         <span>笔记信息</span>
@@ -910,7 +924,7 @@
         <span>成交</span>
       </div>
       <div class="qianfan-scope">
-        第一版仅作用于当前标签页；刷新页面后会恢复官方布局。
+        仅作用于当前千帆标签页，不修改店铺数据；可随时恢复官方布局。
       </div>
       <button
         id="btn-qianfan-full-table"

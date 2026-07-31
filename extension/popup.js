@@ -7,7 +7,7 @@ let CACHED_SHEET_URL = "";
 const XHS_HOST_RE = /(?:xiaohongshu\.com|xhslink\.com)/i;
 // v4.4.0：小红书账号主页 URL pattern
 const XHS_PROFILE_RE = /xiaohongshu\.com\/user\/profile\//i;
-const QIANFAN_FULL_TABLE_CONTROLLER_KEY = "__XHS_QIANFAN_FULL_TABLE_V1__";
+const QIANFAN_FULL_TABLE_CONTROLLER_KEY = "__XHS_QIANFAN_FULL_TABLE_V2__";
 const PROFILE_COLLECT_LIMIT = 400;
 const PROFILE_SCROLL_MIN_DELAY_MS = 1200;
 const PROFILE_SCROLL_MAX_DELAY_MS = 2200;
@@ -193,21 +193,21 @@ function renderQianfanFullTableState(state) {
     btn.textContent = "恢复官方布局";
     setQianfanFullTableStatus(
       "success",
-      `已全量显示 ${state.columnCount || "当前"} 列；排序、筛选和翻页仍使用小红书原功能。`
+      `宽屏分析模式已开启：${state.columnCount || "当前"} 列保持可读；排序、筛选和翻页仍使用小红书原功能。`
     );
     return;
   }
 
   if (state.available) {
-    btn.textContent = `全量显示 ${state.columnCount || "当前"} 列`;
+    btn.textContent = `开启宽屏分析（${state.columnCount || "当前"} 列）`;
     setQianfanFullTableStatus(
       "success",
-      `已识别 ${state.columnCount || "当前"} 列，点击按钮即可在同一屏横向比较。`
+      `已识别 ${state.columnCount || "当前"} 列，开启后会利用浏览器右侧空白并保持数据可读。`
     );
     return;
   }
 
-  btn.textContent = "重新检测并全量显示";
+  btn.textContent = "重新检测并开启宽屏";
   setQianfanFullTableStatus(
     "error",
     state.message || "还没识别到“笔记列表”，请等页面加载完成后重试。"
@@ -241,8 +241,8 @@ async function initQianfanFullTable(tab) {
 async function handleQianfanFullTableToggle() {
   const btn = document.getElementById("btn-qianfan-full-table");
   btn.disabled = true;
-  btn.textContent = "正在调整页面…";
-  setQianfanFullTableStatus("loading", "正在调整表格列宽，请稍候…");
+  btn.textContent = "正在切换宽屏…";
+  setQianfanFullTableStatus("loading", "正在扩展千帆工作区并调整可读列宽，请稍候…");
 
   try {
     const tab = AL_STATE.tabId ? { id: AL_STATE.tabId } : await getCurrentTab();
