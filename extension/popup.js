@@ -7,7 +7,24 @@ let CACHED_SHEET_URL = "";
 const XHS_HOST_RE = /(?:xiaohongshu\.com|xhslink\.com)/i;
 // v4.4.0：小红书账号主页 URL pattern
 const XHS_PROFILE_RE = /xiaohongshu\.com\/user\/profile\//i;
-const QIANFAN_FULL_TABLE_CONTROLLER_KEY = "__XHS_QIANFAN_FULL_TABLE_V3__";
+const QIANFAN_FULL_TABLE_CONTROLLER_KEY = "__XHS_QIANFAN_FULL_TABLE_V4__";
+const QIANFAN_WIDE_TABLE_PATHS = new Set([
+  "/app-datacenter/note-data/goods",
+  "/app-datacenter/good-data",
+  "/app-datacenter/business-overview",
+  "/app-datacenter/search-overview",
+  "/app-datacenter/note-blue-chain",
+  "/app-datacenter/business-refund/pay-time",
+  "/app-datacenter/business-account",
+  "/app-datacenter/live-list",
+  "/app-datacenter/good-data/real-time",
+  "/app-datacenter/search-overview/words",
+  "/app-datacenter/business-cps",
+  "/app-item/list/shelf",
+  "/app-promotion/promotion-tools/analysis-index",
+  "/app-distribution/create-promotion",
+  "/app-distribution/live-broadcast/kol",
+]);
 const PROFILE_COLLECT_LIMIT = 400;
 const PROFILE_SCROLL_MIN_DELAY_MS = 1200;
 const PROFILE_SCROLL_MAX_DELAY_MS = 2200;
@@ -136,12 +153,11 @@ function isXhsCommercePage(rawUrl) {
   }
 }
 
-function isQianfanNoteDataPage(rawUrl, rawTitle) {
+function isQianfanWideTablePage(rawUrl) {
   try {
     const u = new URL(String(rawUrl || ""), "https://www.xiaohongshu.com");
     if (!/(^|\.)xiaohongshu\.com$/i.test(u.hostname)) return false;
-    const normalizedTitle = String(rawTitle || "").replace(/\s+/g, "");
-    return /笔记数据[-—|｜]商品笔记/.test(normalizedTitle);
+    return QIANFAN_WIDE_TABLE_PATHS.has(u.pathname);
   } catch (e) {
     return false;
   }
@@ -193,16 +209,22 @@ function renderQianfanFullTableState(state) {
     btn.textContent = "恢复官方布局";
     setQianfanFullTableStatus(
       "success",
-      `宽屏分析模式已开启：${state.columnCount || "当前"} 列保持可读；排序、筛选和翻页仍使用小红书原功能。`
+      state.waitingForTable
+        ? `${state.pageName || "当前页面"}宽屏已开启，正在等待表格数据加载。`
+        : `${state.pageName || "当前页面"}宽屏已开启：${state.columnCount || "当前"} 列保持可读；排序、筛选和翻页仍使用小红书原功能。`
     );
     return;
   }
 
   if (state.available) {
-    btn.textContent = `开启宽屏分析（${state.columnCount || "当前"} 列）`;
+    btn.textContent = state.tableAvailable
+      ? `开启宽屏分析（${state.columnCount || "当前"} 列）`
+      : "开启宽屏分析";
     setQianfanFullTableStatus(
       "success",
-      `已识别 ${state.columnCount || "当前"} 列，开启后会利用浏览器右侧空白并保持数据可读。`
+      state.tableAvailable
+        ? `已识别${state.pageName ? `“${state.pageName}”` : ""} ${state.columnCount || "当前"} 列，开启后会利用浏览器两侧空白并保持数据可读。`
+        : `已识别“${state.pageName || "当前"}”页面，表格加载完成后会自动应用宽屏。`
     );
     return;
   }
@@ -210,7 +232,7 @@ function renderQianfanFullTableState(state) {
   btn.textContent = "重新检测并开启宽屏";
   setQianfanFullTableStatus(
     "error",
-    state.message || "还没识别到“笔记列表”，请等页面加载完成后重试。"
+    state.message || "还没识别到千帆宽表页面，请等页面加载完成后重试。"
   );
 }
 
@@ -223,7 +245,7 @@ async function initQianfanFullTable(tab) {
   const btn = document.getElementById("btn-qianfan-full-table");
   btn.disabled = true;
   btn.textContent = "正在检测表格…";
-  setQianfanFullTableStatus("loading", "正在检测“笔记列表”…");
+  setQianfanFullTableStatus("loading", "正在检测当前页面表格…");
 
   try {
     const state = await runQianfanFullTableAction(tab.id, "status");
@@ -915,8 +937,8 @@ async function init() {
   AL_STATE.tabId = tab.id;
   AL_STATE.cfg = cfg;
 
-  // 千帆商品笔记表格是纯页面显示工具，不依赖飞书登录或后端接口。
-  if (isQianfanNoteDataPage(url, rawTitle)) {
+  // 千帆宽表是纯页面显示工具，不依赖飞书登录或后端接口。
+  if (isQianfanWideTablePage(url)) {
     await initQianfanFullTable(tab);
     return;
   }

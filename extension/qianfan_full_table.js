@@ -1,20 +1,39 @@
-// 千帆「商品笔记 - 笔记列表」全量显示控制器。
+// 千帆宽表页面全量显示控制器。
 // 仅修改当前浏览器标签页的展示，不读取、上传或改写店铺数据。
 (function initQianfanFullTableModule() {
   "use strict";
 
-  const CONTROLLER_KEY = "__XHS_QIANFAN_FULL_TABLE_V3__";
+  const CONTROLLER_KEY = "__XHS_QIANFAN_FULL_TABLE_V4__";
   const LEGACY_CONTROLLER_KEYS = [
     "__XHS_QIANFAN_FULL_TABLE_V1__",
     "__XHS_QIANFAN_FULL_TABLE_V2__",
+    "__XHS_QIANFAN_FULL_TABLE_V3__",
   ];
   const STYLE_ID = "xhs-qianfan-wide-workspace-style";
   const GRID_MARKER = "data-xhs-qianfan-full-table";
+  const TABLE_MARKER = "data-xhs-qianfan-wide-table";
   const ROOT_MARKER = "data-xhs-qianfan-wide-workspace";
   const MENU_MARKER = "data-xhs-qianfan-centered-menu";
   const WIDE_EDGE_GAP = 24;
   const TARGET_BASE_HEADERS = ["笔记信息", "关联商品", "发布时间", "操作"];
   const TARGET_METRIC_HEADERS = ["笔记加购件数", "笔记阅读数", "加购件数", "阅读数"];
+  const PAGE_PROFILES = Object.freeze([
+    { key: "note_goods", path: "/app-datacenter/note-data/goods", name: "商品笔记", minimumHeaders: 14, mode: "note-grid" },
+    { key: "goods_overview", path: "/app-datacenter/good-data", name: "商品总览", minimumHeaders: 12 },
+    { key: "business_overview", path: "/app-datacenter/business-overview", name: "成交分析", minimumHeaders: 11 },
+    { key: "search_overview", path: "/app-datacenter/search-overview", name: "搜索总览", minimumHeaders: 9 },
+    { key: "note_blue_chain", path: "/app-datacenter/note-blue-chain", name: "笔记蓝链", minimumHeaders: 10 },
+    { key: "business_refund", path: "/app-datacenter/business-refund/pay-time", name: "退款分析", minimumHeaders: 7 },
+    { key: "business_account", path: "/app-datacenter/business-account", name: "账号分析", minimumHeaders: 9 },
+    { key: "live_list", path: "/app-datacenter/live-list", name: "直播场次", minimumHeaders: 7 },
+    { key: "goods_realtime", path: "/app-datacenter/good-data/real-time", name: "实时商品", minimumHeaders: 8 },
+    { key: "search_words", path: "/app-datacenter/search-overview/words", name: "引流搜索词", minimumHeaders: 7 },
+    { key: "business_cps", path: "/app-datacenter/business-cps", name: "买手分析", minimumHeaders: 9 },
+    { key: "item_shelf", path: "/app-item/list/shelf", name: "售卖中商品", minimumHeaders: 9 },
+    { key: "promotion_analysis", path: "/app-promotion/promotion-tools/analysis-index", name: "营销数据", minimumHeaders: 12 },
+    { key: "distribution_goods", path: "/app-distribution/create-promotion", name: "商品合作", minimumHeaders: 8 },
+    { key: "buyer_square", path: "/app-distribution/live-broadcast/kol", name: "买手广场", minimumHeaders: 11 },
+  ]);
 
   function normalizeText(value) {
     return String(value || "").replace(/\s+/g, "").trim();
@@ -25,6 +44,20 @@
     const hasBaseHeaders = TARGET_BASE_HEADERS.every((name) => normalized.includes(name));
     const hasMetricHeader = TARGET_METRIC_HEADERS.some((name) => normalized.includes(name));
     return hasBaseHeaders && hasMetricHeader && normalized.length >= 6;
+  }
+
+  function resolvePageProfile(rawLocation) {
+    let pathname = "";
+    if (typeof rawLocation === "string") {
+      try {
+        pathname = new URL(rawLocation, "https://ark.xiaohongshu.com").pathname;
+      } catch (error) {
+        pathname = rawLocation;
+      }
+    } else if (rawLocation && typeof rawLocation.pathname === "string") {
+      pathname = rawLocation.pathname;
+    }
+    return PAGE_PROFILES.find((profile) => profile.path === pathname) || null;
   }
 
   function buildGridTemplate(headerCount) {
@@ -46,9 +79,22 @@
     );
   }
 
+  function getTableHeaders(table) {
+    if (!table) return [];
+    const directHeaders = getDirectHeaders(table);
+    if (directHeaders.length) return directHeaders;
+    if (typeof table.querySelectorAll !== "function") return [];
+    return Array.from(
+      table.querySelectorAll(
+        "th, [role=\"columnheader\"], .d-table__header-cell, .d-th"
+      )
+    );
+  }
+
   function createController(targetWindow) {
     const doc = targetWindow.document;
-    const trackedGrids = new Map();
+    const trackedTables = new Map();
+    const trackedTableContainers = new Map();
     const trackedWorkspaceRoots = new Map();
     const trackedWorkspaceMenus = new Map();
     const layoutBaselines = new Map();
@@ -57,17 +103,38 @@
     let resizeBound = false;
     let scheduled = false;
     let lastLayout = null;
+    let activeProfileKey = "";
+    let baseStyleText = "";
 
-    function findTargetGrids() {
-      return Array.from(doc.querySelectorAll(".d-grid.d-table")).filter((grid) => {
-        const names = getDirectHeaders(grid).map((header) => header.textContent || "");
-        return isTargetHeaderList(names);
+    function getCurrentProfile() {
+      return resolvePageProfile(targetWindow.location || "");
+    }
+
+    function isVisibleTable(table) {
+      if (!table || typeof table.getBoundingClientRect !== "function") return true;
+      const rect = table.getBoundingClientRect();
+      return Number(rect.width) > 300 && Number(rect.height) > 40;
+    }
+
+    function findTargetTables(profile = getCurrentProfile()) {
+      if (!profile || typeof doc.querySelectorAll !== "function") return [];
+      if (profile.mode === "note-grid") {
+        return Array.from(doc.querySelectorAll(".d-grid.d-table")).filter((grid) => {
+          const names = getDirectHeaders(grid).map((header) => header.textContent || "");
+          return isVisibleTable(grid) && isTargetHeaderList(names);
+        });
+      }
+      return Array.from(
+        doc.querySelectorAll(".d-table__content, .d-grid.d-table")
+      ).filter((table) => {
+        return isVisibleTable(table)
+          && getTableHeaders(table).length >= profile.minimumHeaders;
       });
     }
 
-    function findWorkspaceRoot(grid) {
-      if (grid && typeof grid.closest === "function") {
-        const root = grid.closest("#app-root-content-wrapper");
+    function findWorkspaceRoot(table) {
+      if (table && typeof table.closest === "function") {
+        const root = table.closest("#app-root-content-wrapper");
         if (root) return root;
       }
       return doc.getElementById("app-root-content-wrapper");
@@ -85,6 +152,14 @@
       const rootRect = typeof root.getBoundingClientRect === "function"
         ? root.getBoundingClientRect()
         : null;
+      const markedMenu = candidates.find((candidate) => {
+        if (!candidate || typeof candidate.getBoundingClientRect !== "function") return false;
+        const rect = candidate.getBoundingClientRect();
+        return candidate.getAttribute(MENU_MARKER) === "on"
+          && Number(rect.width) > 0
+          && Number(rect.height) > 0;
+      });
+      if (markedMenu) return markedMenu;
       return candidates.find((candidate) => {
         if (!candidate || typeof candidate.getBoundingClientRect !== "function") return false;
         const rect = candidate.getBoundingClientRect();
@@ -154,6 +229,11 @@
       const baseline = {
         rootLeft: Number(rootRect.left) || 0,
         menuLeft: Number(menuRect.left) || 0,
+        rootWidth: Number(rootRect.width) || 0,
+        menuWidth: Math.max(
+          0,
+          (Number(rootRect.left) || 0) - (Number(menuRect.left) || 0)
+        ),
         rootMarginLeft: readPixelValue(root, "margin-left", Number(rootRect.left) || 0),
         menuMarginLeft: readPixelValue(menu, "margin-left", Number(menuRect.left) || 0),
       };
@@ -161,7 +241,7 @@
       return baseline;
     }
 
-    function calculateCenteredLayout(root, menu) {
+    function calculateCenteredLayout(root, menu, requiredWorkspaceWidth = 0) {
       const viewportWidth = Number(targetWindow.innerWidth) || 0;
       const baseline = rememberLayoutBaseline(root, menu);
       if (!baseline || !viewportWidth) {
@@ -174,9 +254,25 @@
         };
       }
       const normalizedMenuLeft = Math.round(baseline.menuLeft);
-      const outerGap = Math.max(
+      const defaultOuterGap = Math.max(
         WIDE_EDGE_GAP,
         (normalizedMenuLeft + WIDE_EDGE_GAP) / 2
+      );
+      const maximumWorkspaceWidth = Math.max(
+        0,
+        viewportWidth - baseline.menuWidth - (WIDE_EDGE_GAP * 2)
+      );
+      const defaultWorkspaceWidth = Math.max(
+        0,
+        viewportWidth - baseline.menuWidth - (defaultOuterGap * 2)
+      );
+      const desiredWorkspaceWidth = Math.min(
+        maximumWorkspaceWidth,
+        Math.max(defaultWorkspaceWidth, Number(requiredWorkspaceWidth) || 0)
+      );
+      const outerGap = Math.max(
+        WIDE_EDGE_GAP,
+        (viewportWidth - baseline.menuWidth - desiredWorkspaceWidth) / 2
       );
       const shiftLeft = Math.max(0, baseline.menuLeft - outerGap);
       const menuLeftGap = Math.max(
@@ -194,21 +290,43 @@
         rightGap,
         workspaceWidth: Math.max(0, viewportWidth - leftGap - rightGap),
         centeringError: Math.abs(menuLeftGap - rightGap),
+        requiredWorkspaceWidth: Number(requiredWorkspaceWidth) || 0,
+        fitsAllTables: desiredWorkspaceWidth + 1 >= (Number(requiredWorkspaceWidth) || 0),
       };
     }
 
-    function applyWorkspaceLayout(root, menu) {
+    function measureRequiredWorkspace(root, tables, profile) {
+      if (!root || !tables.length || (profile && profile.mode === "note-grid")) {
+        return 0;
+      }
+      const rootRect = typeof root.getBoundingClientRect === "function"
+        ? root.getBoundingClientRect()
+        : null;
+      const rootWidth = rootRect ? Number(rootRect.width) || 0 : Number(root.clientWidth) || 0;
+      return tables.reduce((required, table) => {
+        const clientWidth = Number(table.clientWidth)
+          || (typeof table.getBoundingClientRect === "function"
+            ? Number(table.getBoundingClientRect().width) || 0
+            : 0);
+        const scrollWidth = Math.max(clientWidth, Number(table.scrollWidth) || 0);
+        const surroundingWidth = Math.max(0, rootWidth - clientWidth);
+        return Math.max(required, scrollWidth + surroundingWidth);
+      }, 0);
+    }
+
+    function applyWorkspaceLayout(root, menu, requiredWorkspaceWidth = 0) {
       if (!root || !menu) return null;
       rememberWorkspaceRoot(root);
       rememberWorkspaceMenu(menu);
-      const layout = calculateCenteredLayout(root, menu);
+      const layout = calculateCenteredLayout(root, menu, requiredWorkspaceWidth);
       root.setAttribute(ROOT_MARKER, "on");
       menu.setAttribute(MENU_MARKER, "on");
+      updateLayoutStyle(layout);
       menu.style.setProperty("margin-left", `${layout.menuLeftGap}px`, "important");
       root.style.setProperty("margin-left", `${layout.leftGap}px`, "important");
       root.style.setProperty("margin-right", `${layout.rightGap}px`, "important");
       root.style.setProperty("min-width", "0px", "important");
-      root.style.setProperty("width", "auto", "important");
+      root.style.setProperty("width", `${layout.workspaceWidth}px`, "important");
       root.style.setProperty("max-width", "none", "important");
       root.style.setProperty("overflow-x", "auto", "important");
       lastLayout = layout;
@@ -216,17 +334,33 @@
     }
 
     function ensureStyle() {
-      if (doc.getElementById(STYLE_ID)) return;
+      const existingStyle = doc.getElementById(STYLE_ID);
+      if (existingStyle) {
+        if (!baseStyleText) baseStyleText = existingStyle.textContent || "";
+        return existingStyle;
+      }
       const style = doc.createElement("style");
       style.id = STYLE_ID;
-      style.textContent = `
+      baseStyleText = `
         #app-root-content-wrapper[${ROOT_MARKER}="on"] {
           box-sizing: border-box !important;
           max-width: none !important;
         }
         #app-root-content-wrapper[${ROOT_MARKER}="on"] .page-container,
         #app-root-content-wrapper[${ROOT_MARKER}="on"] .dc-module-block,
-        #app-root-content-wrapper[${ROOT_MARKER}="on"] .dc-module-block__content {
+        #app-root-content-wrapper[${ROOT_MARKER}="on"] .dc-module-block__content,
+        #app-root-content-wrapper[${ROOT_MARKER}="on"] .single-spa-layout-slot-common,
+        #app-root-content-wrapper[${ROOT_MARKER}="on"] .sub-app,
+        #app-root-content-wrapper[${ROOT_MARKER}="on"] .item-list-page,
+        #app-root-content-wrapper[${ROOT_MARKER}="on"] .list-wrapper {
+          width: 100% !important;
+          max-width: none !important;
+          box-sizing: border-box !important;
+        }
+        #app-root-content-wrapper[${ROOT_MARKER}="on"] .d-table-v2,
+        #app-root-content-wrapper[${ROOT_MARKER}="on"] .d-table-wrapper,
+        #app-root-content-wrapper[${ROOT_MARKER}="on"] .d-table__content[${TABLE_MARKER}="on"],
+        #app-root-content-wrapper[${ROOT_MARKER}="on"] .d-grid.d-table[${TABLE_MARKER}="on"] {
           width: 100% !important;
           max-width: none !important;
           box-sizing: border-box !important;
@@ -240,7 +374,6 @@
           min-width: 0 !important;
           padding-left: 8px !important;
           padding-right: 8px !important;
-          font-size: 12px !important;
         }
         .d-grid.d-table[${GRID_MARKER}="on"] > .d-th .d-th-main {
           min-width: 0 !important;
@@ -254,50 +387,123 @@
           text-overflow: clip !important;
           word-break: normal !important;
           overflow-wrap: anywhere !important;
-          font-size: 12px !important;
-          line-height: 16px !important;
           text-align: center !important;
         }
         .d-grid.d-table[${GRID_MARKER}="on"] > .d-td .d-text {
           min-width: 0 !important;
-          font-size: 12px !important;
-          line-height: 18px !important;
         }
       `;
+      style.textContent = baseStyleText;
       (doc.head || doc.documentElement).appendChild(style);
+      return style;
     }
 
-    function rememberGrid(grid) {
-      if (trackedGrids.has(grid)) return;
-      trackedGrids.set(grid, {
-        columnsValue: grid.style.getPropertyValue("grid-template-columns"),
-        columnsPriority: grid.style.getPropertyPriority("grid-template-columns"),
-        markerExisted: grid.hasAttribute(GRID_MARKER),
-        markerValue: grid.getAttribute(GRID_MARKER),
+    function updateLayoutStyle(layout) {
+      const style = ensureStyle();
+      if (!style || !layout) return;
+      style.textContent = `${baseStyleText}
+        .menu-wrapper-container[${MENU_MARKER}="on"],
+        #root-menu-wrapper[${MENU_MARKER}="on"] {
+          margin-left: ${layout.menuLeftGap}px !important;
+        }
+        #app-root-content-wrapper[${ROOT_MARKER}="on"] {
+          margin-left: ${layout.leftGap}px !important;
+          margin-right: ${layout.rightGap}px !important;
+          min-width: 0 !important;
+          width: ${layout.workspaceWidth}px !important;
+          max-width: none !important;
+          overflow-x: auto !important;
+        }
+      `;
+    }
+
+    function rememberTable(table) {
+      if (trackedTables.has(table)) return;
+      const properties = {};
+      ["grid-template-columns", "width", "max-width"].forEach((name) => {
+        properties[name] = {
+          value: table.style.getPropertyValue(name),
+          priority: table.style.getPropertyPriority(name),
+        };
+      });
+      trackedTables.set(table, {
+        properties,
+        gridMarkerExisted: table.hasAttribute(GRID_MARKER),
+        gridMarkerValue: table.getAttribute(GRID_MARKER),
+        tableMarkerExisted: table.hasAttribute(TABLE_MARKER),
+        tableMarkerValue: table.getAttribute(TABLE_MARKER),
       });
     }
 
-    function applyGrid(grid) {
-      const headerCount = getDirectHeaders(grid).length;
+    function rememberTableContainer(container) {
+      if (!container || trackedTableContainers.has(container)) return;
+      const properties = {};
+      ["width", "max-width", "box-sizing"].forEach((name) => {
+        properties[name] = {
+          value: container.style.getPropertyValue(name),
+          priority: container.style.getPropertyPriority(name),
+        };
+      });
+      trackedTableContainers.set(container, { properties });
+    }
+
+    function expandTableContainers(table, workspaceRoot) {
+      for (
+        let container = table && table.parentElement;
+        container && container !== workspaceRoot;
+        container = container.parentElement
+      ) {
+        rememberTableContainer(container);
+        container.style.setProperty("width", "100%", "important");
+        container.style.setProperty("max-width", "none", "important");
+        container.style.setProperty("box-sizing", "border-box", "important");
+      }
+    }
+
+    function applyTable(table, profile, workspaceRoot) {
+      const headerCount = getTableHeaders(table).length;
       if (headerCount < 5) return false;
-      rememberGrid(grid);
-      grid.setAttribute(GRID_MARKER, "on");
-      grid.style.setProperty(
-        "grid-template-columns",
-        buildGridTemplate(headerCount),
-        "important"
-      );
+      rememberTable(table);
+      expandTableContainers(table, workspaceRoot);
+      table.setAttribute(TABLE_MARKER, "on");
+      table.style.setProperty("width", "100%", "important");
+      table.style.setProperty("max-width", "none", "important");
+      if (profile && profile.mode === "note-grid") {
+        table.setAttribute(GRID_MARKER, "on");
+        table.style.setProperty(
+          "grid-template-columns",
+          buildGridTemplate(headerCount),
+          "important"
+        );
+      }
       return true;
     }
 
     function applyAll() {
       if (!enabled) return 0;
+      const profile = getCurrentProfile();
+      if (!profile) {
+        restoreAll();
+        activeProfileKey = "";
+        return 0;
+      }
+      if (activeProfileKey && activeProfileKey !== profile.key) {
+        restoreAll();
+      }
+      activeProfileKey = profile.key;
       ensureStyle();
-      return findTargetGrids().reduce((count, grid) => {
-        const workspaceRoot = findWorkspaceRoot(grid);
-        applyWorkspaceLayout(workspaceRoot, findWorkspaceMenu(workspaceRoot));
-        return count + (applyGrid(grid) ? 1 : 0);
-      }, 0);
+      const tables = findTargetTables(profile);
+      const workspaceRoot = findWorkspaceRoot(tables[0]);
+      const workspaceMenu = findWorkspaceMenu(workspaceRoot);
+      applyWorkspaceLayout(
+        workspaceRoot,
+        workspaceMenu,
+        measureRequiredWorkspace(workspaceRoot, tables, profile)
+      );
+      return tables.reduce(
+        (count, table) => count + (applyTable(table, profile, workspaceRoot) ? 1 : 0),
+        0
+      );
     }
 
     function scheduleApply() {
@@ -315,23 +521,36 @@
     }
 
     function restoreAll() {
-      trackedGrids.forEach((original, grid) => {
-        if (original.columnsValue) {
-          grid.style.setProperty(
-            "grid-template-columns",
-            original.columnsValue,
-            original.columnsPriority || ""
-          );
+      trackedTables.forEach((original, table) => {
+        Object.entries(original.properties).forEach(([name, saved]) => {
+          if (saved.value) {
+            table.style.setProperty(name, saved.value, saved.priority || "");
+          } else {
+            table.style.removeProperty(name);
+          }
+        });
+        if (original.gridMarkerExisted) {
+          table.setAttribute(GRID_MARKER, original.gridMarkerValue || "");
         } else {
-          grid.style.removeProperty("grid-template-columns");
+          table.removeAttribute(GRID_MARKER);
         }
-        if (original.markerExisted) {
-          grid.setAttribute(GRID_MARKER, original.markerValue || "");
+        if (original.tableMarkerExisted) {
+          table.setAttribute(TABLE_MARKER, original.tableMarkerValue || "");
         } else {
-          grid.removeAttribute(GRID_MARKER);
+          table.removeAttribute(TABLE_MARKER);
         }
       });
-      trackedGrids.clear();
+      trackedTables.clear();
+      trackedTableContainers.forEach((original, container) => {
+        Object.entries(original.properties).forEach(([name, saved]) => {
+          if (saved.value) {
+            container.style.setProperty(name, saved.value, saved.priority || "");
+          } else {
+            container.style.removeProperty(name);
+          }
+        });
+      });
+      trackedTableContainers.clear();
       trackedWorkspaceRoots.forEach((original, root) => {
         Object.entries(original.properties).forEach(([name, saved]) => {
           if (saved.value) {
@@ -401,18 +620,23 @@
     }
 
     function status() {
-      const targets = findTargetGrids();
-      const headerCounts = targets.map((grid) => getDirectHeaders(grid).length);
+      const profile = getCurrentProfile();
+      const targets = findTargetTables(profile);
+      const headerCounts = targets.map((table) => getTableHeaders(table).length);
       const columnCount = headerCounts.length ? Math.max(...headerCounts) : 0;
-      const workspaceRoot = targets.length ? findWorkspaceRoot(targets[0]) : null;
+      const workspaceRoot = findWorkspaceRoot(targets[0]);
       const workspaceMenu = workspaceRoot ? findWorkspaceMenu(workspaceRoot) : null;
       const workspaceRect = workspaceRoot && typeof workspaceRoot.getBoundingClientRect === "function"
         ? workspaceRoot.getBoundingClientRect()
         : null;
       return {
         ok: true,
-        available: targets.length > 0 && Boolean(workspaceRoot) && Boolean(workspaceMenu),
+        available: Boolean(profile) && Boolean(workspaceRoot) && Boolean(workspaceMenu),
+        supported: Boolean(profile),
+        pageKey: profile ? profile.key : "",
+        pageName: profile ? profile.name : "",
         tableAvailable: targets.length > 0,
+        waitingForTable: Boolean(profile) && targets.length === 0,
         workspaceAvailable: Boolean(workspaceRoot),
         menuAvailable: Boolean(workspaceMenu),
         enabled,
@@ -423,20 +647,24 @@
         minimumMetricWidth: 84,
         outerGap: lastLayout ? lastLayout.rightGap : 0,
         centeringError: lastLayout ? lastLayout.centeringError : 0,
+        requiredWorkspaceWidth: lastLayout ? lastLayout.requiredWorkspaceWidth : 0,
+        fitsAllTables: lastLayout ? lastLayout.fitsAllTables : false,
       };
     }
 
     function enable() {
-      const availableTargets = findTargetGrids();
-      if (!availableTargets.length) {
+      const profile = getCurrentProfile();
+      if (!profile) {
         return {
           ok: false,
           available: false,
           enabled: false,
-          code: "table_not_found",
-          message: "还没识别到“笔记列表”表格，请等页面加载完成后重试。",
+          supported: false,
+          code: "route_not_supported",
+          message: "当前页面不在千帆宽表适配清单中。",
         };
       }
+      const availableTargets = findTargetTables(profile);
       const workspaceRoot = findWorkspaceRoot(availableTargets[0]);
       if (!workspaceRoot) {
         return {
@@ -463,10 +691,15 @@
         };
       }
       enabled = true;
+      activeProfileKey = profile.key;
       ensureStyle();
-      const layout = applyWorkspaceLayout(workspaceRoot, workspaceMenu);
+      const layout = applyWorkspaceLayout(
+        workspaceRoot,
+        workspaceMenu,
+        measureRequiredWorkspace(workspaceRoot, availableTargets, profile)
+      );
       const matchedCount = availableTargets.reduce(
-        (count, grid) => count + (applyGrid(grid) ? 1 : 0),
+        (count, table) => count + (applyTable(table, profile, workspaceRoot) ? 1 : 0),
         0
       );
       startWatching();
@@ -482,6 +715,7 @@
     function disable() {
       const previousStatus = status();
       enabled = false;
+      activeProfileKey = "";
       stopWatching();
       restoreAll();
       return {
@@ -500,10 +734,13 @@
 
   const exportsForTest = {
     CONTROLLER_KEY,
+    PAGE_PROFILES,
     ROOT_MARKER,
     MENU_MARKER,
+    TABLE_MARKER,
     normalizeText,
     isTargetHeaderList,
+    resolvePageProfile,
     buildGridTemplate,
     createController,
   };
