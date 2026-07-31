@@ -7,7 +7,7 @@ let CACHED_SHEET_URL = "";
 const XHS_HOST_RE = /(?:xiaohongshu\.com|xhslink\.com)/i;
 // v4.4.0：小红书账号主页 URL pattern
 const XHS_PROFILE_RE = /xiaohongshu\.com\/user\/profile\//i;
-const QIANFAN_FULL_TABLE_CONTROLLER_KEY = "__XHS_QIANFAN_FULL_TABLE_V2__";
+const QIANFAN_FULL_TABLE_CONTROLLER_KEY = "__XHS_QIANFAN_FULL_TABLE_V3__";
 const PROFILE_COLLECT_LIMIT = 400;
 const PROFILE_SCROLL_MIN_DELAY_MS = 1200;
 const PROFILE_SCROLL_MAX_DELAY_MS = 2200;

@@ -11,6 +11,7 @@ const assert = require("assert");
 const {
   CONTROLLER_KEY,
   ROOT_MARKER,
+  MENU_MARKER,
   isTargetHeaderList,
   buildGridTemplate,
   createController,
@@ -33,8 +34,9 @@ const headers = [
   "操作",
 ];
 
-assert.strictEqual(CONTROLLER_KEY, "__XHS_QIANFAN_FULL_TABLE_V2__");
+assert.strictEqual(CONTROLLER_KEY, "__XHS_QIANFAN_FULL_TABLE_V3__");
 assert.strictEqual(ROOT_MARKER, "data-xhs-qianfan-wide-workspace");
+assert.strictEqual(MENU_MARKER, "data-xhs-qianfan-centered-menu");
 assert.strictEqual(isTargetHeaderList(headers), true);
 assert.strictEqual(
   isTargetHeaderList(["笔记信息", "关联商品", "发布时间", "笔记阅读数"]),
@@ -122,6 +124,17 @@ const root = {
     return { left: 624.5, right: 1858.5, width: 1234 };
   },
 };
+const menuState = makeAttributes();
+const menu = {
+  ...menuState,
+  id: "",
+  style: makeStyle({
+    "margin-left": "482.5px",
+  }),
+  getBoundingClientRect() {
+    return { left: 482.5, right: 624.5, width: 142, height: 1008 };
+  },
+};
 const gridState = makeAttributes();
 const grid = {
   ...gridState,
@@ -150,8 +163,9 @@ const document = {
     },
   },
   querySelectorAll(selector) {
-    assert.strictEqual(selector, ".d-grid.d-table");
-    return [grid];
+    if (selector === ".d-grid.d-table") return [grid];
+    if (selector === ".menu-wrapper-container, #root-menu-wrapper") return [menu];
+    throw new Error(`unexpected selector: ${selector}`);
   },
   getElementById(id) {
     if (id === "app-root-content-wrapper") return root;
@@ -206,10 +220,15 @@ assert.strictEqual(enabled.columnCount, 14);
 assert.strictEqual(enabled.metricCount, 10);
 assert.strictEqual(enabled.minimumMetricWidth, 84);
 assert.strictEqual(enabled.workspaceWidth, 1692);
+assert.strictEqual(enabled.menuAvailable, true);
+assert.strictEqual(enabled.outerGap, 253.5);
+assert.strictEqual(enabled.centeringError, 0);
 assert.strictEqual(gridState.attributes.get("data-xhs-qianfan-full-table"), "on");
 assert.strictEqual(rootState.attributes.get(ROOT_MARKER), "on");
-assert.strictEqual(root.style.getPropertyValue("margin-left"), "625px");
-assert.strictEqual(root.style.getPropertyValue("margin-right"), "24px");
+assert.strictEqual(menuState.attributes.get(MENU_MARKER), "on");
+assert.strictEqual(menu.style.getPropertyValue("margin-left"), "253.5px");
+assert.strictEqual(root.style.getPropertyValue("margin-left"), "395.5px");
+assert.strictEqual(root.style.getPropertyValue("margin-right"), "253.5px");
 assert.strictEqual(root.style.getPropertyValue("min-width"), "0px");
 assert.strictEqual(root.style.getPropertyValue("width"), "auto");
 assert.strictEqual(root.style.getPropertyValue("max-width"), "none");
@@ -244,10 +263,27 @@ assert.strictEqual(root.style.getPropertyValue("min-width"), "1234px");
 assert.strictEqual(root.style.getPropertyValue("width"), "");
 assert.strictEqual(root.style.getPropertyValue("max-width"), "");
 assert.strictEqual(root.style.getPropertyValue("overflow-x"), "scroll");
+assert.strictEqual(menuState.attributes.has(MENU_MARKER), false);
+assert.strictEqual(menu.style.getPropertyValue("margin-left"), "482.5px");
 assert.deepStrictEqual(grid.children.map((item) => item.textContent), headers);
 assert.strictEqual(styleNode, null);
 assert.strictEqual(observerDisconnected, true);
 assert.strictEqual(listeners.has("resize"), false);
+
+class ThrowingMutationObserver {
+  observe() {
+    throw new TypeError("offline fixture is not a live Node");
+  }
+  disconnect() {}
+}
+const resilientController = createController({
+  ...fakeWindow,
+  MutationObserver: ThrowingMutationObserver,
+});
+const resilientEnabled = resilientController.enable();
+assert.strictEqual(resilientEnabled.ok, true);
+assert.strictEqual(resilientEnabled.enabled, true);
+resilientController.disable();
 
 const orphanGridState = makeAttributes();
 const orphanGrid = {
@@ -265,6 +301,21 @@ const missingWorkspaceController = createController({
 const missingWorkspace = missingWorkspaceController.enable();
 assert.strictEqual(missingWorkspace.ok, false);
 assert.strictEqual(missingWorkspace.code, "workspace_not_found");
+
+const missingMenuController = createController({
+  document: {
+    querySelectorAll(selector) {
+      if (selector === ".d-grid.d-table") return [grid];
+      return [];
+    },
+    getElementById(id) {
+      return id === "app-root-content-wrapper" ? root : null;
+    },
+  },
+});
+const missingMenu = missingMenuController.enable();
+assert.strictEqual(missingMenu.ok, false);
+assert.strictEqual(missingMenu.code, "menu_not_found");
 
 const missingController = createController({
   document: {

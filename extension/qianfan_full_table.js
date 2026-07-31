@@ -3,11 +3,15 @@
 (function initQianfanFullTableModule() {
   "use strict";
 
-  const CONTROLLER_KEY = "__XHS_QIANFAN_FULL_TABLE_V2__";
-  const LEGACY_CONTROLLER_KEYS = ["__XHS_QIANFAN_FULL_TABLE_V1__"];
+  const CONTROLLER_KEY = "__XHS_QIANFAN_FULL_TABLE_V3__";
+  const LEGACY_CONTROLLER_KEYS = [
+    "__XHS_QIANFAN_FULL_TABLE_V1__",
+    "__XHS_QIANFAN_FULL_TABLE_V2__",
+  ];
   const STYLE_ID = "xhs-qianfan-wide-workspace-style";
   const GRID_MARKER = "data-xhs-qianfan-full-table";
   const ROOT_MARKER = "data-xhs-qianfan-wide-workspace";
+  const MENU_MARKER = "data-xhs-qianfan-centered-menu";
   const WIDE_EDGE_GAP = 24;
   const TARGET_BASE_HEADERS = ["笔记信息", "关联商品", "发布时间", "操作"];
   const TARGET_METRIC_HEADERS = ["笔记加购件数", "笔记阅读数", "加购件数", "阅读数"];
@@ -46,10 +50,13 @@
     const doc = targetWindow.document;
     const trackedGrids = new Map();
     const trackedWorkspaceRoots = new Map();
+    const trackedWorkspaceMenus = new Map();
+    const layoutBaselines = new Map();
     let enabled = false;
     let observer = null;
     let resizeBound = false;
     let scheduled = false;
+    let lastLayout = null;
 
     function findTargetGrids() {
       return Array.from(doc.querySelectorAll(".d-grid.d-table")).filter((grid) => {
@@ -64,6 +71,28 @@
         if (root) return root;
       }
       return doc.getElementById("app-root-content-wrapper");
+    }
+
+    function findWorkspaceMenu(root) {
+      if (!root || typeof doc.querySelectorAll !== "function") return null;
+      const candidates = Array.from(
+        doc.querySelectorAll(".menu-wrapper-container, #root-menu-wrapper")
+      ).map((candidate) => (
+        candidate.id === "root-menu-wrapper"
+        && typeof candidate.closest === "function"
+        && candidate.closest(".menu-wrapper-container")
+      ) || candidate);
+      const rootRect = typeof root.getBoundingClientRect === "function"
+        ? root.getBoundingClientRect()
+        : null;
+      return candidates.find((candidate) => {
+        if (!candidate || typeof candidate.getBoundingClientRect !== "function") return false;
+        const rect = candidate.getBoundingClientRect();
+        if (!rect || Number(rect.width) <= 0 || Number(rect.height) <= 0) return false;
+        if (!rootRect) return true;
+        return Number(rect.right) <= Number(rootRect.left) + 4
+          && Number(rootRect.left) - Number(rect.right) <= 48;
+      }) || null;
     }
 
     function rememberWorkspaceRoot(root) {
@@ -89,37 +118,100 @@
       });
     }
 
-    function calculateWideLayout(root) {
-      const viewportWidth = Number(targetWindow.innerWidth) || 0;
-      const rect = root && typeof root.getBoundingClientRect === "function"
+    function rememberWorkspaceMenu(menu) {
+      if (!menu || trackedWorkspaceMenus.has(menu)) return;
+      trackedWorkspaceMenus.set(menu, {
+        marginLeftValue: menu.style.getPropertyValue("margin-left"),
+        marginLeftPriority: menu.style.getPropertyPriority("margin-left"),
+        markerExisted: menu.hasAttribute(MENU_MARKER),
+        markerValue: menu.getAttribute(MENU_MARKER),
+      });
+    }
+
+    function readPixelValue(element, propertyName, fallback) {
+      const inlineValue = element && element.style
+        ? Number.parseFloat(element.style.getPropertyValue(propertyName))
+        : Number.NaN;
+      if (Number.isFinite(inlineValue)) return inlineValue;
+      if (typeof targetWindow.getComputedStyle === "function" && element) {
+        const computedValue = Number.parseFloat(
+          targetWindow.getComputedStyle(element).getPropertyValue(propertyName)
+        );
+        if (Number.isFinite(computedValue)) return computedValue;
+      }
+      return fallback;
+    }
+
+    function rememberLayoutBaseline(root, menu) {
+      if (layoutBaselines.has(root)) return layoutBaselines.get(root);
+      const rootRect = root && typeof root.getBoundingClientRect === "function"
         ? root.getBoundingClientRect()
         : null;
-      if (!rect || !viewportWidth) {
-        return { leftGap: 166, rightGap: WIDE_EDGE_GAP, workspaceWidth: 0 };
+      const menuRect = menu && typeof menu.getBoundingClientRect === "function"
+        ? menu.getBoundingClientRect()
+        : null;
+      if (!rootRect || !menuRect) return null;
+      const baseline = {
+        rootLeft: Number(rootRect.left) || 0,
+        menuLeft: Number(menuRect.left) || 0,
+        rootMarginLeft: readPixelValue(root, "margin-left", Number(rootRect.left) || 0),
+        menuMarginLeft: readPixelValue(menu, "margin-left", Number(menuRect.left) || 0),
+      };
+      layoutBaselines.set(root, baseline);
+      return baseline;
+    }
+
+    function calculateCenteredLayout(root, menu) {
+      const viewportWidth = Number(targetWindow.innerWidth) || 0;
+      const baseline = rememberLayoutBaseline(root, menu);
+      if (!baseline || !viewportWidth) {
+        return {
+          menuLeftGap: WIDE_EDGE_GAP,
+          leftGap: 166,
+          rightGap: WIDE_EDGE_GAP,
+          workspaceWidth: 0,
+          centeringError: 0,
+        };
       }
-      const maxLeftGap = Math.max(WIDE_EDGE_GAP, viewportWidth - 320);
-      const leftGap = Math.min(
-        Math.max(WIDE_EDGE_GAP, Math.round(Number(rect.left) || 0)),
-        maxLeftGap
+      const normalizedMenuLeft = Math.round(baseline.menuLeft);
+      const outerGap = Math.max(
+        WIDE_EDGE_GAP,
+        (normalizedMenuLeft + WIDE_EDGE_GAP) / 2
       );
+      const shiftLeft = Math.max(0, baseline.menuLeft - outerGap);
+      const menuLeftGap = Math.max(
+        WIDE_EDGE_GAP,
+        baseline.menuMarginLeft - shiftLeft
+      );
+      const leftGap = Math.max(
+        menuLeftGap,
+        baseline.rootMarginLeft - shiftLeft
+      );
+      const rightGap = outerGap;
       return {
+        menuLeftGap,
         leftGap,
-        rightGap: WIDE_EDGE_GAP,
-        workspaceWidth: Math.max(0, viewportWidth - leftGap - WIDE_EDGE_GAP),
+        rightGap,
+        workspaceWidth: Math.max(0, viewportWidth - leftGap - rightGap),
+        centeringError: Math.abs(menuLeftGap - rightGap),
       };
     }
 
-    function applyWorkspaceRoot(root) {
-      if (!root) return null;
+    function applyWorkspaceLayout(root, menu) {
+      if (!root || !menu) return null;
       rememberWorkspaceRoot(root);
-      const layout = calculateWideLayout(root);
+      rememberWorkspaceMenu(menu);
+      const layout = calculateCenteredLayout(root, menu);
       root.setAttribute(ROOT_MARKER, "on");
+      menu.setAttribute(MENU_MARKER, "on");
+      menu.style.setProperty("margin-left", `${layout.menuLeftGap}px`, "important");
       root.style.setProperty("margin-left", `${layout.leftGap}px`, "important");
       root.style.setProperty("margin-right", `${layout.rightGap}px`, "important");
       root.style.setProperty("min-width", "0px", "important");
       root.style.setProperty("width", "auto", "important");
       root.style.setProperty("max-width", "none", "important");
       root.style.setProperty("overflow-x", "auto", "important");
+      lastLayout = layout;
       return layout;
     }
 
@@ -202,7 +294,8 @@
       if (!enabled) return 0;
       ensureStyle();
       return findTargetGrids().reduce((count, grid) => {
-        applyWorkspaceRoot(findWorkspaceRoot(grid));
+        const workspaceRoot = findWorkspaceRoot(grid);
+        applyWorkspaceLayout(workspaceRoot, findWorkspaceMenu(workspaceRoot));
         return count + (applyGrid(grid) ? 1 : 0);
       }, 0);
     }
@@ -254,6 +347,25 @@
         }
       });
       trackedWorkspaceRoots.clear();
+      trackedWorkspaceMenus.forEach((original, menu) => {
+        if (original.marginLeftValue) {
+          menu.style.setProperty(
+            "margin-left",
+            original.marginLeftValue,
+            original.marginLeftPriority || ""
+          );
+        } else {
+          menu.style.removeProperty("margin-left");
+        }
+        if (original.markerExisted) {
+          menu.setAttribute(MENU_MARKER, original.markerValue || "");
+        } else {
+          menu.removeAttribute(MENU_MARKER);
+        }
+      });
+      trackedWorkspaceMenus.clear();
+      layoutBaselines.clear();
+      lastLayout = null;
       const style = doc.getElementById(STYLE_ID);
       if (style) style.remove();
     }
@@ -261,10 +373,15 @@
     function startWatching() {
       if (!observer && typeof targetWindow.MutationObserver === "function") {
         observer = new targetWindow.MutationObserver(scheduleApply);
-        observer.observe(doc.body || doc.documentElement, {
-          childList: true,
-          subtree: true,
-        });
+        try {
+          observer.observe(doc.body || doc.documentElement, {
+            childList: true,
+            subtree: true,
+          });
+        } catch (error) {
+          observer.disconnect();
+          observer = null;
+        }
       }
       if (!resizeBound && typeof targetWindow.addEventListener === "function") {
         targetWindow.addEventListener("resize", scheduleApply);
@@ -288,20 +405,24 @@
       const headerCounts = targets.map((grid) => getDirectHeaders(grid).length);
       const columnCount = headerCounts.length ? Math.max(...headerCounts) : 0;
       const workspaceRoot = targets.length ? findWorkspaceRoot(targets[0]) : null;
+      const workspaceMenu = workspaceRoot ? findWorkspaceMenu(workspaceRoot) : null;
       const workspaceRect = workspaceRoot && typeof workspaceRoot.getBoundingClientRect === "function"
         ? workspaceRoot.getBoundingClientRect()
         : null;
       return {
         ok: true,
-        available: targets.length > 0 && Boolean(workspaceRoot),
+        available: targets.length > 0 && Boolean(workspaceRoot) && Boolean(workspaceMenu),
         tableAvailable: targets.length > 0,
         workspaceAvailable: Boolean(workspaceRoot),
+        menuAvailable: Boolean(workspaceMenu),
         enabled,
         matchedCount: targets.length,
         columnCount,
         metricCount: Math.max(0, columnCount - 4),
         workspaceWidth: workspaceRect ? Math.round(Number(workspaceRect.width) || 0) : 0,
         minimumMetricWidth: 84,
+        outerGap: lastLayout ? lastLayout.rightGap : 0,
+        centeringError: lastLayout ? lastLayout.centeringError : 0,
       };
     }
 
@@ -328,9 +449,22 @@
           message: "已经识别表格，但没有找到千帆页面外壳。请刷新千帆页面后重试。",
         };
       }
+      const workspaceMenu = findWorkspaceMenu(workspaceRoot);
+      if (!workspaceMenu) {
+        return {
+          ok: false,
+          available: false,
+          tableAvailable: true,
+          workspaceAvailable: true,
+          menuAvailable: false,
+          enabled: false,
+          code: "menu_not_found",
+          message: "已经识别表格，但没有找到千帆左侧菜单。请刷新千帆页面后重试。",
+        };
+      }
       enabled = true;
       ensureStyle();
-      const layout = applyWorkspaceRoot(workspaceRoot);
+      const layout = applyWorkspaceLayout(workspaceRoot, workspaceMenu);
       const matchedCount = availableTargets.reduce(
         (count, grid) => count + (applyGrid(grid) ? 1 : 0),
         0
@@ -367,6 +501,7 @@
   const exportsForTest = {
     CONTROLLER_KEY,
     ROOT_MARKER,
+    MENU_MARKER,
     normalizeText,
     isTargetHeaderList,
     buildGridTemplate,
