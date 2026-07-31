@@ -7,6 +7,7 @@ let CACHED_SHEET_URL = "";
 const XHS_HOST_RE = /(?:xiaohongshu\.com|xhslink\.com)/i;
 // v4.4.0：小红书账号主页 URL pattern
 const XHS_PROFILE_RE = /xiaohongshu\.com\/user\/profile\//i;
+const QIANFAN_FULL_TABLE_CONTROLLER_KEY = "__XHS_QIANFAN_FULL_TABLE_V1__";
 const PROFILE_COLLECT_LIMIT = 400;
 const PROFILE_SCROLL_MIN_DELAY_MS = 1200;
 const PROFILE_SCROLL_MAX_DELAY_MS = 2200;
@@ -132,6 +133,128 @@ function isXhsCommercePage(rawUrl) {
     return /\/goods-detail\/[^/?#]+/.test(u.pathname) || /\/vendor\/[^/?#]+/.test(u.pathname);
   } catch (e) {
     return false;
+  }
+}
+
+function isQianfanNoteDataPage(rawUrl, rawTitle) {
+  try {
+    const u = new URL(String(rawUrl || ""), "https://www.xiaohongshu.com");
+    if (!/(^|\.)xiaohongshu\.com$/i.test(u.hostname)) return false;
+    const normalizedTitle = String(rawTitle || "").replace(/\s+/g, "");
+    return /笔记数据[-—|｜]商品笔记/.test(normalizedTitle);
+  } catch (e) {
+    return false;
+  }
+}
+
+function setQianfanFullTableStatus(type, message) {
+  const status = document.getElementById("qianfan-full-table-status");
+  status.className = `status ${type} show`;
+  status.textContent = message;
+}
+
+async function runQianfanFullTableAction(tabId, action) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["qianfan_full_table.js"],
+  });
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (controllerKey, actionName) => {
+      const controller = window[controllerKey];
+      if (!controller || typeof controller[actionName] !== "function") {
+        return {
+          ok: false,
+          available: false,
+          enabled: false,
+          code: "controller_unavailable",
+          message: "页面显示控制器没有成功加载，请刷新页面后重试。",
+        };
+      }
+      return controller[actionName]();
+    },
+    args: [QIANFAN_FULL_TABLE_CONTROLLER_KEY, action],
+  });
+  return (results && results[0] && results[0].result) || {
+    ok: false,
+    available: false,
+    enabled: false,
+    code: "missing_result",
+    message: "没有收到页面处理结果，请重试。",
+  };
+}
+
+function renderQianfanFullTableState(state) {
+  const btn = document.getElementById("btn-qianfan-full-table");
+  btn.disabled = false;
+  btn.setAttribute("aria-pressed", state.enabled ? "true" : "false");
+
+  if (state.enabled) {
+    btn.textContent = "恢复官方布局";
+    setQianfanFullTableStatus(
+      "success",
+      `已全量显示 ${state.columnCount || "当前"} 列；排序、筛选和翻页仍使用小红书原功能。`
+    );
+    return;
+  }
+
+  if (state.available) {
+    btn.textContent = `全量显示 ${state.columnCount || "当前"} 列`;
+    setQianfanFullTableStatus(
+      "success",
+      `已识别 ${state.columnCount || "当前"} 列，点击按钮即可在同一屏横向比较。`
+    );
+    return;
+  }
+
+  btn.textContent = "重新检测并全量显示";
+  setQianfanFullTableStatus(
+    "error",
+    state.message || "还没识别到“笔记列表”，请等页面加载完成后重试。"
+  );
+}
+
+async function initQianfanFullTable(tab) {
+  document.getElementById("qianfan-full-table-panel").style.display = "block";
+  document.getElementById("not-xhs").style.display = "none";
+  document.getElementById("account-lib-card").style.display = "none";
+  document.getElementById("main").style.display = "none";
+
+  const btn = document.getElementById("btn-qianfan-full-table");
+  btn.disabled = true;
+  btn.textContent = "正在检测表格…";
+  setQianfanFullTableStatus("loading", "正在检测“笔记列表”…");
+
+  try {
+    const state = await runQianfanFullTableAction(tab.id, "status");
+    renderQianfanFullTableState(state);
+  } catch (err) {
+    renderQianfanFullTableState({
+      ok: false,
+      available: false,
+      enabled: false,
+      message: `检测失败：${err.message || err}`,
+    });
+  }
+}
+
+async function handleQianfanFullTableToggle() {
+  const btn = document.getElementById("btn-qianfan-full-table");
+  btn.disabled = true;
+  btn.textContent = "正在调整页面…";
+  setQianfanFullTableStatus("loading", "正在调整表格列宽，请稍候…");
+
+  try {
+    const tab = AL_STATE.tabId ? { id: AL_STATE.tabId } : await getCurrentTab();
+    const state = await runQianfanFullTableAction(tab.id, "toggle");
+    renderQianfanFullTableState(state);
+  } catch (err) {
+    renderQianfanFullTableState({
+      ok: false,
+      available: false,
+      enabled: false,
+      message: `调整失败：${err.message || err}`,
+    });
   }
 }
 
@@ -792,6 +915,12 @@ async function init() {
   AL_STATE.tabId = tab.id;
   AL_STATE.cfg = cfg;
 
+  // 千帆商品笔记表格是纯页面显示工具，不依赖飞书登录或后端接口。
+  if (isQianfanNoteDataPage(url, rawTitle)) {
+    await initQianfanFullTable(tab);
+    return;
+  }
+
   // v4：未登录 → 跳 onboarding
   if (!isAuthenticated(cfg)) {
     openOnboarding();
@@ -1074,6 +1203,10 @@ function escapeHTML(s) {
 
 document.addEventListener("DOMContentLoaded", () => {
   init();
+  document.getElementById("btn-qianfan-full-table").addEventListener(
+    "click",
+    handleQianfanFullTableToggle
+  );
   document.querySelectorAll(".feature-tab").forEach((tab) => {
     tab.addEventListener("click", () => setActiveFeatureTab(tab.dataset.page));
   });

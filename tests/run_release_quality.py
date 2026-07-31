@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 CHECKS = [
+    ("千帆笔记列表全量显示", ["python3", "tests/verify_qianfan_full_table.py"]),
     ("当前标签页识别", ["python3", "tests/verify_current_tab_fallback.py"]),
     ("账号主页文本兜底", ["python3", "tests/verify_profile_account_text_fallback.py"]),
     ("账号主页状态兜底", ["python3", "tests/verify_profile_account_initial_state.py"]),
