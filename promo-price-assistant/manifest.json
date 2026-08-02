@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "小红书促销价助手",
+  "short_name": "促销价助手",
+  "version": "1.0.0",
+  "description": "在小红书千帆单品特价页面按95折上限和9毛尾数批量填写促销价，默认只填空白项且不自动创建活动。",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://ark.xiaohongshu.com/*"
+      ],
+      "js": [
+        "price-core.js",
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

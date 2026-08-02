@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN" data-xhs-promo-test-harness="true">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>千帆促销价助手本地验收页</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <style>
+      body { margin: 0; padding: 40px; background: #f5f6f8; color: #111827; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+      main { max-width: 1080px; margin: 0 auto; padding: 28px; background: white; border-radius: 12px; }
+      h1 { margin-top: 0; }
+      .toolbar { display: flex; gap: 12px; margin-bottom: 16px; }
+      .toolbar button { padding: 9px 14px; border: 1px solid #d1d5db; border-radius: 8px; background: white; cursor: pointer; }
+      .d-table__content { max-height: 360px; overflow: auto; border: 1px solid #e5e7eb; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+      th { position: sticky; top: 0; z-index: 2; background: #f8fafc; }
+      td input { width: 120px; padding: 8px; }
+      .d-table__expand-icon { border: 0; background: transparent; cursor: pointer; font-size: 16px; }
+      .muted { color: #64748b; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>新建单品特价 · 本地验收</h1>
+      <p class="muted">用于验证扫描、展开、计算、填空、覆盖保护和撤销，不会连接千帆。</p>
+      <div class="toolbar">
+        <button id="add-second-product" type="button">模拟添加第二件商品</button>
+        <button id="clear-products" type="button">模拟空数据</button>
+      </div>
+      <div class="d-table__content">
+        <table>
+          <thead>
+            <tr><th></th><th>商品信息</th><th>价格</th><th>促销价</th><th>库存</th><th>操作</th></tr>
+          </thead>
+          <tbody id="product-rows">
+            <tr data-product-summary="p1">
+              <td><input type="checkbox" /></td>
+              <td><button class="d-table__expand-icon" type="button" aria-expanded="false">›</button> 小狗泳衣 商品ID：p1</td>
+              <td>55 ~ 102.3</td>
+              <td><input placeholder="请输入促销价" /></td>
+              <td>381</td><td>撤出活动</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+    <template id="p1-skus">
+      <tr><td><input type="checkbox" /></td><td>黄色蜜蜂 S 规格ID：p1-s1 商品ID：p1</td><td>59.4</td><td><input placeholder="请输入促销价" value="55.9" /></td><td>0</td><td>撤出活动</td></tr>
+      <tr><td><input type="checkbox" /></td><td>白色天鹅 L 规格ID：p1-s2 商品ID：p1</td><td>71.5</td><td><input placeholder="请输入促销价" /></td><td>9</td><td>撤出活动</td></tr>
+      <tr><td><input type="checkbox" /></td><td>绿色恐龙 XXL 规格ID：p1-s3 商品ID：p1</td><td>90.2</td><td><input placeholder="请输入促销价" /></td><td>0</td><td>撤出活动</td></tr>
+    </template>
+    <template id="p2-block">
+      <tr data-product-summary="p2"><td><input type="checkbox" /></td><td><button class="d-table__expand-icon" type="button" aria-expanded="false">›</button> 宠物浴袍 商品ID：p2</td><td>37.18 ~ 93.72</td><td><input placeholder="请输入促销价" /></td><td>5490</td><td>撤出活动</td></tr>
+    </template>
+    <template id="p2-skus">
+      <tr><td><input type="checkbox" /></td><td>猫咪浴袍 S 规格ID：p2-s1 商品ID：p2</td><td>49.06</td><td><input placeholder="请输入促销价" /></td><td>248</td><td>撤出活动</td></tr>
+      <tr><td><input type="checkbox" /></td><td>可外穿 L 规格ID：p2-s2 商品ID：p2</td><td>93.72</td><td><input placeholder="请输入促销价" /></td><td>555</td><td>撤出活动</td></tr>
+    </template>
+    <script>
+      const tbody = document.getElementById("product-rows");
+      function bindExpand(row) {
+        const button = row.querySelector(".d-table__expand-icon");
+        if (!button) return;
+        button.addEventListener("click", () => {
+          if (button.getAttribute("aria-expanded") === "true") return;
+          const productId = row.dataset.productSummary;
+          const template = document.getElementById(`${productId}-skus`);
+          row.after(template.content.cloneNode(true));
+          button.setAttribute("aria-expanded", "true");
+          button.textContent = "⌄";
+        });
+      }
+      bindExpand(tbody.querySelector('[data-product-summary="p1"]'));
+      document.getElementById("add-second-product").addEventListener("click", () => {
+        if (tbody.querySelector('[data-product-summary="p2"]')) return;
+        tbody.appendChild(document.getElementById("p2-block").content.cloneNode(true));
+        bindExpand(tbody.querySelector('[data-product-summary="p2"]'));
+      });
+      document.getElementById("clear-products").addEventListener("click", () => {
+        tbody.innerHTML = "";
+      });
+    </script>
+    <script src="../price-core.js"></script>
+    <script src="../content.js"></script>
+  </body>
+</html>

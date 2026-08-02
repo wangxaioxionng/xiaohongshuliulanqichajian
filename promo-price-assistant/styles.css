@@ -1,0 +1,184 @@
+#xhs-promo-price-assistant {
+  position: fixed;
+  top: 112px;
+  right: 20px;
+  z-index: 2147483000;
+  width: 328px;
+  box-sizing: border-box;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #111827;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  box-shadow: 0 12px 34px rgba(17, 24, 39, 0.18);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#xhs-promo-price-assistant * {
+  box-sizing: border-box;
+}
+
+.xhs-promo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.xhs-promo-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.xhs-promo-close {
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.xhs-promo-body {
+  padding: 14px 16px 16px;
+}
+
+.xhs-promo-rule {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.xhs-promo-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.xhs-promo-stat {
+  padding: 9px 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.xhs-promo-stat strong {
+  display: block;
+  font-size: 18px;
+}
+
+.xhs-promo-stat span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.xhs-promo-status {
+  min-height: 42px;
+  margin-bottom: 12px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.xhs-promo-status[data-state="error"] {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.xhs-promo-status[data-state="success"] {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.xhs-promo-overwrite {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #374151;
+}
+
+.xhs-promo-overwrite input {
+  width: 16px;
+  height: 16px;
+}
+
+.xhs-promo-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.45fr;
+  gap: 8px;
+}
+
+.xhs-promo-button {
+  min-height: 38px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #374151;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.xhs-promo-button:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.xhs-promo-button-primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.xhs-promo-button-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.xhs-promo-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.xhs-promo-secondary-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.xhs-promo-link-button {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.xhs-promo-preview {
+  margin-top: 12px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 10px;
+}
+
+.xhs-promo-preview-list {
+  max-height: 184px;
+  margin: 8px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.xhs-promo-preview-list li {
+  padding: 7px 0;
+  border-bottom: 1px dashed #e5e7eb;
+  color: #475569;
+}
+
+.xhs-promo-preview-list strong {
+  color: #111827;
+}

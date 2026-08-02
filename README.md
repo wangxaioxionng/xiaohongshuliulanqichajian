@@ -5,6 +5,7 @@
 ## 当前状态
 
 - 当前打包版本：v4.10.1；15 个千帆宽表页面已完成真实 Chrome 逐页验收
+- 新增独立工具「小红书促销价助手」v1.0.0，源码位于 `promo-price-assistant/`；它与采集插件分开安装，不修改采集链路
 - 千帆宽屏分析已从「商品笔记」扩展为 15 个精确页面：商品笔记保留专用列宽，其余页面按真实表格宽度扩展「左侧菜单 + 主内容」并整体居中
 - 插件弹窗固定为 360px 紧凑宽度，不会被千帆宽屏功能撑大
 - 本功能只调整当前浏览器标签页的展示，不调用采集接口、不修改店铺数据、不写飞书
@@ -23,14 +24,20 @@ xhs-extension-project/
 │   ├── ecosystem.config.js    # PM2 进程配置
 │   ├── nginx-xhs-collect.conf # nginx 站点配置
 │   └── deploy.sh              # 一键部署脚本
-└── extension/                 # Chrome 扩展（Manifest V3）
-    ├── manifest.json
-    ├── popup.html / popup.js     # 弹窗（备注+标签）
-    ├── options.html / options.js # 设置页（API endpoint + token）
-    ├── help.html                 # 帮助文档
-    ├── background.js             # service worker（右键菜单、徽标）
-    ├── qianfan_full_table.js     # 千帆15个宽表页面的居中扩宽与官方布局恢复
-    └── icons/                    # 4 个尺寸的扩展图标
+├── extension/                 # Chrome 扩展（Manifest V3）
+│   ├── manifest.json
+│   ├── popup.html / popup.js     # 弹窗（备注+标签）
+│   ├── options.html / options.js # 设置页（API endpoint + token）
+│   ├── help.html                 # 帮助文档
+│   ├── background.js             # service worker（右键菜单、徽标）
+│   ├── qianfan_full_table.js     # 千帆15个宽表页面的居中扩宽与官方布局恢复
+│   └── icons/                    # 4 个尺寸的扩展图标
+└── promo-price-assistant/      # 独立安装的千帆促销价助手
+    ├── manifest.json           # 仅覆盖千帆域名，不申请额外权限
+    ├── price-core.js           # 95折上限与9毛尾数计算
+    ├── content.js / styles.css # 页面操作面板与表格扫描
+    ├── tests/                  # 自动测试与本地模拟千帆页面
+    └── README.md               # 独立安装、使用和验收说明
 ```
 
 ## 部署流程
